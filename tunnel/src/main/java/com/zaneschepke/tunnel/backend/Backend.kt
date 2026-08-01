@@ -33,7 +33,7 @@ interface Backend {
 
     suspend fun stopAllActiveTunnels(): Result<Unit>
 
-    suspend fun bounceTunnelDevice(tunnelId: Int)
+    suspend fun bounceTunnelDevice(tunnelId: Int, withFreshResolution: Boolean): Boolean
 
     val status: Flow<BackendStatus>
 

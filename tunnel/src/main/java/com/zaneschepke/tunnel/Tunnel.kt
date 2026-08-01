@@ -46,6 +46,24 @@ interface Tunnel {
 
         data class ActiveConfigMonitor(val intervalSeconds: Int = 3) : Feature
 
-        data object SeamlessRecovery : Feature
+        /**
+         * All recovery behaviour for this tunnel.
+         *
+         * @param seamlessRecovery full tunnel bounce after sustained HandshakeFailure, maintaining
+         *   the current config and respecting phone idle/interactive states to prevent fale
+         *   positives
+         * @param dynamicDnsRecovery performs a fresh resolve bypassing the tunnel and updating the
+         *   peers
+         * @param ipv6Recovery based on IPStrategy settings. Attempts to recovery to IPv6 endpoints
+         *   once per network when tunnel is healthy
+         * @param ipv4Fallback only runs with IPStrategy is PreferIpv6, runs once per network when
+         *   there are tunnel failures to fall back to IPv4 endpoints
+         */
+        data class Recovery(
+            val seamlessRecovery: Boolean,
+            val dynamicDnsRecovery: Boolean,
+            internal val ipv4Fallback: Boolean = false,
+            internal val ipv6Recovery: Boolean = false,
+        ) : Feature
     }
 }

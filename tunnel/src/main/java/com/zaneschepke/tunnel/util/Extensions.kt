@@ -1,6 +1,7 @@
 package com.zaneschepke.tunnel.util
 
 import android.os.Build
+import com.zaneschepke.tunnel.enums.FamilyOverride
 import com.zaneschepke.tunnel.model.DnsBootstrapResult
 import com.zaneschepke.tunnel.model.DnsConfig
 import com.zaneschepke.tunnel.model.ResolvedHost
@@ -9,7 +10,6 @@ import com.zaneschepke.wireguardautotunnel.parser.InterfaceSection
 import com.zaneschepke.wireguardautotunnel.parser.PeerSection
 import java.net.Inet4Address
 import java.net.InetAddress
-import timber.log.Timber
 
 /** Parses a CIDR string and returns the address + prefix length */
 internal fun String.parseInetNetwork(): Pair<InetAddress, Int> {
@@ -80,27 +80,14 @@ internal fun Config.buildResolvedPeers(hostMap: Map<PublicKey, ResolvedHost>): L
 }
 
 internal fun Map<PublicKey, DnsBootstrapResult>.toHostMap(
-    preferIpv6: Boolean
+    currentEndpoints: Map<PublicKey, String?> = emptyMap(),
+    familyOverride: FamilyOverride = FamilyOverride.MatchCurrent,
 ): Map<PublicKey, ResolvedHost> =
-    mapNotNull { (pubKey, result) ->
-            val ip4p = result.ipv6.firstNotNullOfOrNull { DnsHostUtils.decodeIp4p(it) }
-
-            // IP4P support
-            if (ip4p != null) {
-                val (ipv4, port) = ip4p
-                Timber.i("IP4P detected for peer!")
-                return@mapNotNull pubKey to ResolvedHost(host = ipv4, forcedPort = port)
-            }
-
-            // Normal path
+    mapNotNull { (pubKey, dns) ->
             val host =
-                if (preferIpv6) {
-                    result.ipv6.firstOrNull() ?: result.ipv4.firstOrNull()
-                } else {
-                    result.ipv4.firstOrNull() ?: result.ipv6.firstOrNull()
-                }
-
-            host?.let { pubKey to ResolvedHost(it) }
+                dns.selectHostForPeer(currentEndpoints[pubKey], familyOverride)
+                    ?: return@mapNotNull null
+            pubKey to ResolvedHost(host = host)
         }
         .toMap()
 
@@ -133,4 +120,25 @@ fun String.ensureDnsPort(defaultPort: Int): String {
     if (s.contains(':')) return s
 
     return "$s:$defaultPort"
+}
+
+internal fun DnsBootstrapResult.selectHostForPeer(
+    currentEndpoint: String?,
+    familyOverride: FamilyOverride,
+): String? {
+    val currentlyIpv6 = currentEndpoint?.contains("[") == true
+    val preferIpv6 =
+        when (familyOverride) {
+            FamilyOverride.MatchCurrent -> currentlyIpv6
+            FamilyOverride.ForceIpv4 -> false
+            FamilyOverride.ForceIpv6 -> true
+        }
+    val host =
+        if (preferIpv6) {
+            ipv6.firstOrNull() ?: ipv4.firstOrNull()
+        } else {
+            ipv4.firstOrNull() ?: ipv6.firstOrNull()
+        } ?: return null
+
+    return if (host.contains(":") && !host.startsWith("[")) "[$host]" else host
 }

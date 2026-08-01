@@ -23,6 +23,7 @@ data class TunnelConfig(
     val isMetered: Boolean = false,
     val ipv6RestoreEnabled: Boolean = false,
     val tunnelBSSIDs: List<String> = emptyList(),
+    val isDDNSTunnel: Boolean = false,
 ) {
 
     fun toSummary() = TunnelSummary(id = id, name = name)
@@ -71,7 +72,14 @@ data class TunnelConfig(
                         )
                     )
                 }
-                if (generalSettings.seamlessRecoveryEnabled) add(Tunnel.Feature.SeamlessRecovery)
+                add(
+                    Tunnel.Feature.Recovery(
+                        seamlessRecovery = generalSettings.seamlessRecoveryEnabled,
+                        dynamicDnsRecovery = config.isDDNSTunnel,
+                        ipv4Fallback = config.isIpv6Preferred,
+                        ipv6Recovery = config.ipv6RestoreEnabled,
+                    )
+                )
             }
 
         override fun updateState(state: Tunnel.State) = Unit

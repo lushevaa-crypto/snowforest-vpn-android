@@ -5,6 +5,9 @@ import com.zaneschepke.tunnel.ApplicationProvider
 import com.zaneschepke.tunnel.Tunnel
 import com.zaneschepke.tunnel.backend.dns.EndpointResolver
 import com.zaneschepke.tunnel.backend.dns.TunnelDnsConfig
+import com.zaneschepke.tunnel.backend.features.ActiveConfigMonitor
+import com.zaneschepke.tunnel.backend.features.TunnelRecovery
+import com.zaneschepke.tunnel.enums.FamilyOverride
 import com.zaneschepke.tunnel.event.TunnelEvent
 import com.zaneschepke.tunnel.model.BackendMode
 import com.zaneschepke.tunnel.model.BootstrapResolution
@@ -17,22 +20,24 @@ import com.zaneschepke.tunnel.state.BackendStatus
 import com.zaneschepke.tunnel.state.BootstrapState
 import com.zaneschepke.tunnel.state.EngineStartResult
 import com.zaneschepke.tunnel.state.KillSwitchState
-import com.zaneschepke.tunnel.util.PublicKey
 import com.zaneschepke.tunnel.util.RootShell
 import com.zaneschepke.tunnel.util.RootShellException
-import com.zaneschepke.tunnel.util.buildResolvedPeers
-import com.zaneschepke.tunnel.util.findEndpointMismatches
+import com.zaneschepke.tunnel.util.hasDynamicEndpoints
+import com.zaneschepke.tunnel.util.rebuildModeWithHostMap
 import com.zaneschepke.tunnel.util.toHostMap
+import com.zaneschepke.tunnel.util.withEndpointsFrom
 import com.zaneschepke.wireguardautotunnel.parser.ActiveConfig
-import com.zaneschepke.wireguardautotunnel.parser.Config
+import com.zaneschepke.wireguardautotunnel.parser.PeerSection
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.collections.emptyMap
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,13 +45,9 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.distinctUntilChangedBy
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.sync.Mutex
@@ -137,117 +138,158 @@ class TunnelBackend(
             .onFailure { cleanup(tunnel.id) }
     }
 
-    override suspend fun bounceTunnelDevice(tunnelId: Int) = tunnelMutex.withLock {
-        val active = _status.value.activeTunnels[tunnelId] ?: return@withLock
-        val previousActiveConfig = active.activeConfig
-        val mode = active.mode ?: return@withLock
-        val tunnel = active.tunnel ?: return@withLock
-        val handle = byTunnelId[tunnelId] ?: return@withLock
-        val dns = active.tunnelDnsConfig
-        engine.stop(handle, mode)
-        resolveAndStartEngine(tunnel, mode, dns, previousActiveConfig)
-    }
-
-    private suspend fun resolveAndStartEngine(
+    private suspend fun bootstrapAndStart(
         tunnel: Tunnel,
         mode: BackendMode,
         tunnelDnsConfig: TunnelDnsConfig? = null,
-        previousActiveConfig: ActiveConfig? = null,
     ) {
-        val needsPeerResolve = hasDynamicEndpoints(mode)
-        val needsDnsResolve = tunnelDnsConfig?.needsResolve() == true
+        updateTunnelBootstrapState(tunnel.id, BootstrapState.ResolvingDns)
 
-        if (needsPeerResolve || needsDnsResolve) {
-            updateTunnelBootstrapState(tunnel.id, BootstrapState.ResolvingDns)
-        }
+        val bootstrapResolution = endpointResolver.resolve(mode, tunnelDnsConfig)
 
-        val bootstrap =
-            if (needsPeerResolve || needsDnsResolve) {
-                endpointResolver.resolve(mode, tunnelDnsConfig)
-            } else {
-                BootstrapResolution(emptyMap(), tunnelDnsConfig)
-            }
-
+        // select peer endpoint IP family based on network state and preference
         val networkHasIpv6 = stableNetworkEngine.stableState.value?.state?.hasIpv6 ?: false
-        val hostMap =
-            bootstrap.peers.toHostMap(
-                preferIpv6 = tunnel.ipStrategy is Tunnel.IpStrategy.PreferIpv6 && networkHasIpv6
-            )
-        val resolvedPeers = mode.config.buildResolvedPeers(hostMap)
-
-        val resolvedConfig = mode.config.copy(peers = resolvedPeers)
-        val updatedMode =
-            when (mode) {
-                is BackendMode.Vpn -> mode.copy(config = resolvedConfig)
-                is BackendMode.Proxy.Standard -> mode.copy(config = resolvedConfig)
-                is BackendMode.Proxy.KillSwitchPrimary -> mode.copy(config = resolvedConfig)
+        val familyOverride =
+            if (tunnel.ipStrategy is Tunnel.IpStrategy.PreferIpv6 && networkHasIpv6) {
+                FamilyOverride.ForceIpv6
+            } else {
+                FamilyOverride.ForceIpv4
             }
 
-        val resolvedDns = bootstrap.tunnelDns
+        // No current endpoints yet, builds host map based on family preference
+        val hostMap =
+            bootstrapResolution.peerKeyResults.toHostMap(
+                currentEndpoints = emptyMap(),
+                familyOverride = familyOverride,
+            )
+        val runtimeMode = mode.rebuildModeWithHostMap(hostMap)
 
         updateActiveTunnel(tunnel.id) {
             it.copy(
-                mode = updatedMode,
-                tunnelDnsConfig = resolvedDns,
+                lastBootstrapResolution = bootstrapResolution,
                 bootstrapState = BootstrapState.Complete,
             )
         }
 
-        val result = engine.start(tunnel.id, updatedMode, resolvedDns)
+        // pass our bootstrapped tunnel dns config
+        val result =
+            engine.start(tunnel.id, runtimeMode, bootstrapResolution.resolvedTunnelDnsConfig)
         onEngineStartResult(tunnel.id, result)
-        if (previousActiveConfig != null) {
-            emitRecoveryEventType(tunnel.id, previousActiveConfig, resolvedConfig)
-        }
     }
 
-    private suspend fun emitRecoveryEventType(
-        tunnelId: Int,
-        previous: ActiveConfig,
-        newConfig: Config,
-    ) {
-        val oldPeers = previous.peers.associateBy { it.publicKey }
-        val newPeers = newConfig.peers.associateBy { it.publicKey }
+    // Should only be called if mode config is static
+    private suspend fun restartWithCurrentMode(
+        handle: Int,
+        tunnel: Tunnel,
+        mode: BackendMode,
+        dns: TunnelDnsConfig?,
+    ): Boolean {
+        engine.stop(handle, mode)
+        val result = engine.start(tunnel.id, mode, dns)
+        onEngineStartResult(tunnel.id, result)
+        return true
+    }
 
-        val ddnsChangedPeers = mutableListOf<PublicKey>()
-        var ipv6ToIpv4Fallback = false
+    private suspend fun bounceActiveConfig(
+        handle: Int,
+        tunnel: Tunnel,
+        mode: BackendMode,
+        tunnelDnsConfig: TunnelDnsConfig?,
+    ): Boolean {
 
-        for ((pubKey, newPeer) in newPeers) {
-            val oldPeer = oldPeers[pubKey] ?: continue
-            if (oldPeer.endpoint == newPeer.endpoint) continue
-
-            val oldEndpoint = oldPeer.endpoint.orEmpty()
-            val newEndpoint = newPeer.endpoint.orEmpty()
-
-            val oldHadIpv6 = oldEndpoint.contains("[")
-            val newHasIpv6 = newEndpoint.contains("[")
-
-            when {
-                // DDNS change
-                !oldHadIpv6 &&
-                    !newHasIpv6 &&
-                    oldEndpoint.substringBeforeLast(":") !=
-                        newEndpoint.substringBeforeLast(":") -> {
-                    ddnsChangedPeers += pubKey
+        val activeConfig =
+            engine.getActiveConfig(handle, mode)
+                ?: run {
+                    Timber.w(
+                        "Unable to get active config for ${tunnel.name} for bounce, stopping bounce"
+                    )
+                    return false
                 }
 
-                // IPv4 fallback
-                oldHadIpv6 && !newHasIpv6 -> {
-                    ipv6ToIpv4Fallback = true
-                }
+        val runtimeMode = mode.withEndpointsFrom(activeConfig)
+        engine.stop(handle, mode)
+        val result = engine.start(tunnel.id, runtimeMode, tunnelDnsConfig)
+        onEngineStartResult(tunnel.id, result)
+        return true
+    }
 
-                // Ignore upgrade, handled in the IPv6 recovery job
-                !oldHadIpv6 && newHasIpv6 -> Unit
+    private suspend fun bounceWithFreshDns(
+        handle: Int,
+        tunnel: Tunnel,
+        mode: BackendMode,
+        tunnelDnsConfig: TunnelDnsConfig?,
+    ): Boolean {
+        val bootstrapResult =
+            try {
+                withTimeout(10.seconds) {
+                    // reuse the cached resolve tunnelDnsConfig
+                    endpointResolver.resolve(mode, tunnelDnsConfig)
+                }
+            } catch (_: TimeoutCancellationException) {
+                Timber.w("Bounce DNS timed out for tunnel ${tunnel.name}, bounce failed")
+                return false
             }
+
+        val currentActiveConfig =
+            engine.getActiveConfig(handle, mode)
+                ?: run {
+                    Timber.w(
+                        "Failed to get the current active config for ${tunnel.name}, stopping the fresh DDNS bounce"
+                    )
+                    return false
+                }
+
+        val currentEndpoints = currentActiveConfig.peers.associate { it.publicKey to it.endpoint }
+
+        val hostMap =
+            bootstrapResult.peerKeyResults.toHostMap(
+                currentEndpoints = currentEndpoints,
+                familyOverride = FamilyOverride.MatchCurrent,
+            )
+        val runtimeMode = mode.rebuildModeWithHostMap(hostMap)
+
+        updateActiveTunnel(tunnel.id) {
+            it.copy(
+                bootstrapState = BootstrapState.Complete,
+                lastBootstrapResolution = bootstrapResult,
+            )
         }
 
-        if (ddnsChangedPeers.isNotEmpty()) {
-            _events.emit(TunnelEvent.DynamicDnsUpdate(tunnelId, ddnsChangedPeers))
-        }
-
-        if (ipv6ToIpv4Fallback) {
-            _events.emit(TunnelEvent.FallbackToIpv4(tunnelId))
-        }
+        engine.stop(handle, mode)
+        val result = engine.start(tunnel.id, runtimeMode, bootstrapResult.resolvedTunnelDnsConfig)
+        onEngineStartResult(tunnel.id, result)
+        return true
     }
+
+    override suspend fun bounceTunnelDevice(tunnelId: Int, withFreshResolution: Boolean): Boolean =
+        tunnelMutex.withLock {
+            val active = _status.value.activeTunnels[tunnelId] ?: return false
+            val mode = active.mode ?: return false
+            val tunnel = active.tunnel ?: return false
+            val handle = byTunnelId[tunnel.id] ?: return false
+
+            // if resolve DNS config doesn't exist, then maybe it is static, or it doesn't exist.
+            // Important we try the unresolved
+            // config because it may be static
+            val runtimeTunnelDnsConfig = active.getRuntimeTunnelDnsConfig()
+
+            val bounced =
+                when {
+                    !mode.config.hasDynamicEndpoints() -> {
+                        restartWithCurrentMode(handle, tunnel, mode, runtimeTunnelDnsConfig)
+                    }
+                    !withFreshResolution -> {
+                        bounceActiveConfig(handle, tunnel, mode, runtimeTunnelDnsConfig)
+                    }
+                    else -> {
+                        bounceWithFreshDns(handle, tunnel, mode, runtimeTunnelDnsConfig)
+                    }
+                }
+            if (bounced) {
+                _events.emit(TunnelEvent.SeamlessRecoveryAttempted(tunnelId))
+            }
+            return bounced
+        }
 
     private fun startTunnelBootstrapJob(
         tunnel: Tunnel,
@@ -255,7 +297,7 @@ class TunnelBackend(
         tunnelDnsConfig: TunnelDnsConfig? = null,
     ) = scope.launch {
         try {
-            resolveAndStartEngine(tunnel, mode, tunnelDnsConfig)
+            bootstrapAndStart(tunnel, mode, tunnelDnsConfig)
             val scriptsEnabled = tunnel.scriptsEnabled
             if (scriptsEnabled) {
                 mode.config.`interface`.postUp?.let { runScripts(it, tunnel.id) }
@@ -263,13 +305,13 @@ class TunnelBackend(
 
             tunnelJobs[tunnel.id] = startTunnelJobs(tunnel, mode)
         } catch (t: Throwable) {
-            if (t is kotlinx.coroutines.CancellationException) {
+            if (t is CancellationException) {
                 Timber.d("Bootstrap job cancelled for tunnel ${tunnel.id}")
             } else {
                 Timber.e(t, "Tunnel bootstrap failed for ${tunnel.id}")
                 cleanup(tunnel.id)
             }
-            if (t is kotlinx.coroutines.CancellationException) throw t
+            if (t is CancellationException) throw t
         }
     }
 
@@ -421,10 +463,6 @@ class TunnelBackend(
         Result.success(Unit)
     }
 
-    private fun hasDynamicEndpoints(mode: BackendMode): Boolean {
-        return mode.config.peers.any { !it.isStaticallyConfigured && it.endpoint != null }
-    }
-
     private fun updateStatus(transform: (BackendStatus) -> BackendStatus) {
         _status.update(transform)
     }
@@ -462,7 +500,7 @@ class TunnelBackend(
     }
 
     private fun needsBootstrap(mode: BackendMode, cfg: TunnelDnsConfig?): Boolean =
-        hasDynamicEndpoints(mode) || (cfg?.needsResolve() == true)
+        mode.config.hasDynamicEndpoints() || (cfg?.needsResolve() == true)
 
     fun updateTunnelBootstrapState(id: Int, newState: BootstrapState) {
         updateActiveTunnel(id) { tunnel -> tunnel.copy(bootstrapState = newState) }
@@ -471,203 +509,145 @@ class TunnelBackend(
     private fun startTunnelJobs(tunnel: Tunnel, mode: BackendMode): Job {
         return scope.launch {
             supervisorScope {
-                val isNotStaticConfig = mode.config.peers.any { !it.isStaticallyConfigured }
-                if (isNotStaticConfig) {
-                    when (val strategy = tunnel.ipStrategy) {
-                        Tunnel.IpStrategy.Ipv4Only -> Unit
-                        is Tunnel.IpStrategy.PreferIpv6 -> {
-                            if (strategy.recoveryEnabled) startIpv6RecoveryJob(tunnel.id, mode)
-                        }
-                    }
-                }
-
                 tunnel.features.forEach { feature ->
                     when (feature) {
                         is Tunnel.Feature.ActiveConfigMonitor -> {
-                            startActiveConfigJob(tunnel.id, mode, feature.intervalSeconds)
+                            val monitor =
+                                ActiveConfigMonitor(
+                                    tunnelId = tunnel.id,
+                                    interval = feature.intervalSeconds.seconds,
+                                    host =
+                                        object : ActiveConfigMonitor.Host {
+                                            override suspend fun getActiveConfig(): ActiveConfig? {
+                                                val handle = byTunnelId[tunnel.id] ?: return null
+                                                return engine.getActiveConfig(handle, mode)
+                                            }
+
+                                            override fun updateActiveConfig(config: ActiveConfig?) {
+                                                updateActiveTunnel(tunnel.id) {
+                                                    it.copy(activeConfig = config)
+                                                }
+                                            }
+                                        },
+                                )
+                            monitor.start(this)
                         }
-                        Tunnel.Feature.SeamlessRecovery -> startSeamlessRecoveryJob(tunnel.id)
+                        is Tunnel.Feature.Recovery -> {
+                            val hasDynamicEndpoints = mode.config.hasDynamicEndpoints()
+                            val recovery =
+                                TunnelRecovery(
+                                    tunnelId = tunnel.id,
+                                    mode = mode,
+                                    recovery =
+                                        feature.copy(
+                                            dynamicDnsRecovery =
+                                                feature.dynamicDnsRecovery && hasDynamicEndpoints,
+                                            ipv6Recovery =
+                                                hasDynamicEndpoints &&
+                                                    (tunnel.ipStrategy
+                                                            as? Tunnel.IpStrategy.PreferIpv6)
+                                                        ?.recoveryEnabled ?: false,
+                                            ipv4Fallback =
+                                                hasDynamicEndpoints &&
+                                                    tunnel.ipStrategy is
+                                                        Tunnel.IpStrategy.PreferIpv6,
+                                        ),
+                                    failureThreshold = TUNNEL_FAILURE_THRESHOLD_MILLIS.milliseconds,
+                                    stabilizeWindow =
+                                        TUNNEL_HEALTH_STABILIZE_WINDOW_MILLIS.milliseconds,
+                                    host =
+                                        object : TunnelRecovery.Host {
+                                            override fun observe(): Flow<TunnelRecovery.Snapshot> =
+                                                combine(
+                                                        status.mapNotNull {
+                                                            it.activeTunnels[tunnel.id]
+                                                        },
+                                                        stableNetworkEngine.stableState
+                                                            .filterNotNull(),
+                                                    ) { active, network ->
+                                                        TunnelRecovery.Snapshot(
+                                                            transportState = active.transportState,
+                                                            lastResolvedPeers =
+                                                                active.lastBootstrapResolution
+                                                                    ?.peerKeyResults,
+                                                            networkUsable =
+                                                                network.state.hasUsableNetwork(),
+                                                            networkHasIpv6 = network.state.hasIpv6,
+                                                            activeNetworkKey =
+                                                                network.state.activeNetwork.key(),
+                                                        )
+                                                    }
+                                                    .distinctUntilChanged()
+
+                                            override suspend fun getActiveConfig(): ActiveConfig? {
+                                                val handle = byTunnelId[tunnel.id] ?: return null
+                                                return engine.getActiveConfig(handle, mode)
+                                            }
+
+                                            override suspend fun resolveFresh():
+                                                BootstrapResolution? {
+                                                val active =
+                                                    _status.value.activeTunnels[tunnel.id]
+                                                        ?: return null
+                                                val runtimeTunnelDnsConfig =
+                                                    active.getRuntimeTunnelDnsConfig()
+                                                return try {
+                                                    withTimeout(10.seconds) {
+                                                        endpointResolver.resolve(
+                                                            mode,
+                                                            runtimeTunnelDnsConfig,
+                                                        )
+                                                    }
+                                                } catch (_: TimeoutCancellationException) {
+                                                    Timber.w(
+                                                        "Recovery: fresh peer resolve timed out for tunnel ${tunnel.id}"
+                                                    )
+                                                    null
+                                                }
+                                            }
+
+                                            override suspend fun updatePeers(
+                                                peers: List<PeerSection>
+                                            ) {
+                                                val handle = byTunnelId[tunnel.id] ?: return
+                                                engine.updatePeers(handle, mode, peers)
+                                            }
+
+                                            override suspend fun bounce(
+                                                withFreshResolution: Boolean
+                                            ): Boolean {
+                                                return bounceTunnelDevice(
+                                                    tunnel.id,
+                                                    withFreshResolution,
+                                                )
+                                            }
+
+                                            override fun updateActiveTunnel(
+                                                transform: (ActiveTunnel) -> ActiveTunnel
+                                            ) {
+                                                this@TunnelBackend.updateActiveTunnel(
+                                                    tunnel.id,
+                                                    transform,
+                                                )
+                                            }
+
+                                            override suspend fun emit(event: TunnelEvent) {
+                                                _events.emit(event)
+                                            }
+                                        },
+                                    context = serviceManager.context,
+                                )
+                            recovery.start(this)
+                        }
                     }
                 }
-
                 awaitCancellation()
             }
         }
     }
 
-    private fun CoroutineScope.startActiveConfigJob(
-        tunnelId: Int,
-        mode: BackendMode,
-        interval: Int,
-    ) = launch {
-        while (isActive) {
-            val handle =
-                byTunnelId[tunnelId]
-                    ?: run {
-                        Timber.w("Failed to find tunnel handle, stopping stats job")
-                        return@launch
-                    }
-            val activeConfig = engine.getActiveConfig(handle, mode)
-            updateActiveTunnel(tunnelId) { it.copy(activeConfig = activeConfig) }
-            delay(interval.seconds)
-        }
-    }
-
-    /*
-    Seamless recovery now covers all the use cases for DDNS, IPv4 fallback, NAT issues, Mimic packet issues, etc.
-    Since we now dup the vpn service fd and don't like WG close it, we can safely stop (close) the tunnel device via
-    bounceTunnelDevice and start it up again with a fresh DNS query that will solve DDNS and IPv4 fallback. Due to the fresh
-    tunnel device, we take a nuclear approach to fixing any other issues that could also occur at the same time (like NAT or
-    Amnezia mimic packets issues or network migration issues)
-    */
-    private fun CoroutineScope.startSeamlessRecoveryJob(tunnelId: Int) = launch {
-        val shouldRecoverFlow =
-            combine(
-                    status.mapNotNull { it.activeTunnels[tunnelId]?.transportState },
-                    stableNetworkEngine.stableState.filterNotNull(),
-                ) { tunnelState, networkState ->
-                    val isHandshakeFailure = tunnelState is Tunnel.State.Up.HandshakeFailure
-                    val isNetworkUsable = networkState.state.hasUsableNetwork()
-
-                    isHandshakeFailure && isNetworkUsable
-                }
-                .distinctUntilChanged()
-
-        while (isActive) {
-            Timber.i("Seamless recovery: waiting for recovery conditions to be met")
-            shouldRecoverFlow.first { it }
-
-            if (!isActive) break
-
-            Timber.i(
-                "Seamless recovery: entered HandshakeFailure while network connected. Waiting for tunnel to stabilize..."
-            )
-            delay(TUNNEL_HEALTH_STABILIZE_WINDOW_MILLIS.milliseconds)
-
-            // get fresh snapshots
-            val currentState = _status.value.activeTunnels[tunnelId]?.transportState
-            val isNetworkStillConnected =
-                stableNetworkEngine.stableState.value?.state?.hasUsableNetwork() == true
-
-            if (currentState is Tunnel.State.Up.HandshakeFailure && isNetworkStillConnected) {
-                val currentAttempts = _status.value.activeTunnels[tunnelId]?.recoveryAttempts ?: 0
-                updateActiveTunnel(tunnelId) {
-                    it.copy(
-                        recoveryAttempts = currentAttempts + 1,
-                        pendingRecovery = true,
-                        lastRecoveryAttemptMs = System.currentTimeMillis(),
-                    )
-                }
-                _events.emit(TunnelEvent.SeamlessRecoveryAttempted(tunnelId))
-                Timber.i(
-                    "Seamless recovery: bouncing tunnel $tunnelId after persistent handshake failure"
-                )
-                bounceTunnelDevice(tunnelId)
-
-                delay(TUNNEL_RECOVERY_COOLDOWN_MILLIS.milliseconds)
-            }
-        }
-    }
-
-    /*
-    Runs once per network where IPv6 is available while state is healthy and checks the current
-    active WG config to see if we have any endpoints that aren't IPv6 that should be upgraded to IPv6
-    and upgrades them via WG's UAPI with a peer update request
-    */
-    private fun CoroutineScope.startIpv6RecoveryJob(tunnelId: Int, mode: BackendMode) = launch {
-        val ipv6RecoveryTrigger =
-            combine(
-                    stableNetworkEngine.stableState.filterNotNull(),
-                    status.mapNotNull { it.activeTunnels[tunnelId] },
-                ) { networkState, tunnel ->
-                    val activeNetworkKey = networkState.state.activeNetwork.key()
-                    val hasIpv6 = networkState.state.hasIpv6
-                    val isHealthy = tunnel.transportState is Tunnel.State.Up.Healthy
-
-                    Triple(activeNetworkKey, hasIpv6, isHealthy)
-                }
-                // Only run once per distinct network and IPv6 presence
-                .distinctUntilChangedBy { it.first + it.second }
-                // Only emit when recovery conditions met
-                .filter { (_, hasIpv6, isHealthy) -> hasIpv6 && isHealthy }
-
-        while (isActive) {
-            Timber.i("Ipv6 Recovery: waiting for recovery conditions to be met")
-            ipv6RecoveryTrigger.first()
-
-            if (!isActive) break
-
-            Timber.d("Ipv6 Recovery: conditions met, waiting for tunnel to stabilize...")
-            delay(TUNNEL_HEALTH_STABILIZE_WINDOW_MILLIS.milliseconds)
-
-            // recheck
-            val currentNetworkState = stableNetworkEngine.stableState.value?.state
-            val currentTunnel = _status.value.activeTunnels[tunnelId]
-
-            val stillHealthy = currentTunnel?.transportState is Tunnel.State.Up.Healthy
-            val stillHasIpv6 = currentNetworkState?.hasIpv6 == true
-
-            if (!stillHealthy || !stillHasIpv6) {
-                Timber.d(
-                    "Aborting IPv6 recovery: tunnel lost healthy or network support during stabilization"
-                )
-                continue
-            }
-
-            val activeConfig =
-                try {
-                    val handle =
-                        byTunnelId[tunnelId]
-                            ?: run {
-                                Timber.w(
-                                    "Failed to find tunnel handle, Ipv6 recovery cannot complete"
-                                )
-                                continue
-                            }
-                    engine.getActiveConfig(handle, mode)
-                } catch (t: Throwable) {
-                    Timber.w(t, "UAPI query failed during peer reconciliation")
-                    continue
-                } ?: continue
-
-            // Quick check to avoid DNS call if not needed
-            if (
-                activeConfig.peers.all { it.endpoint == null || it.endpoint?.contains("[") == true }
-            ) {
-                Timber.i("Ipv6 Recovery: All peers are already IPv6 or empty endpoints")
-                continue
-            }
-
-            val resolved = endpointResolver.resolve(mode)
-            if (resolved.peers.isEmpty()) continue
-
-            val mismatches = activeConfig.findEndpointMismatches(resolved.peers, true)
-
-            if (mismatches.isNotEmpty()) {
-                Timber.i(
-                    "Ipv6 Recovery: found endpoint mismatches, updating tunnel with Ipv6 endpoints"
-                )
-                val resolvedPeers = mode.config.buildResolvedPeers(mismatches)
-                val handle =
-                    byTunnelId[tunnelId]
-                        ?: run {
-                            Timber.w(
-                                "Failed to find tunnel handle, recovery to ipv6 peers cannot complete"
-                            )
-                            continue
-                        }
-                engine.updatePeers(handle, mode, resolvedPeers)
-                _events.emit(TunnelEvent.RecoveredToIpv6(tunnelId))
-            } else {
-                Timber.i(
-                    "Ipv6 Recovery: No mismatches found for tunnel Ipv6 endpoints, no recovery necessary"
-                )
-            }
-        }
-    }
-
     companion object {
-        private const val TUNNEL_HEALTH_STABILIZE_WINDOW_MILLIS = 8_000L
-        private const val TUNNEL_RECOVERY_COOLDOWN_MILLIS = 30_000L
+        private const val TUNNEL_FAILURE_THRESHOLD_MILLIS = 30_000L
+        private const val TUNNEL_HEALTH_STABILIZE_WINDOW_MILLIS = 12_000L
     }
 }

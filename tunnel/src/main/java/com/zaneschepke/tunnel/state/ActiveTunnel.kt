@@ -3,6 +3,7 @@ package com.zaneschepke.tunnel.state
 import com.zaneschepke.tunnel.Tunnel
 import com.zaneschepke.tunnel.backend.dns.TunnelDnsConfig
 import com.zaneschepke.tunnel.model.BackendMode
+import com.zaneschepke.tunnel.model.BootstrapResolution
 import com.zaneschepke.wireguardautotunnel.parser.ActiveConfig
 
 data class ActiveTunnel(
@@ -15,7 +16,11 @@ data class ActiveTunnel(
     val activeConfig: ActiveConfig? = null,
     val uptime: Long? = null,
     val recoveryAttempts: Int = 0,
-    val pendingRecovery: Boolean = false,
     val lastRecoveryAttemptMs: Long = 0L,
     val tunnelDnsConfig: TunnelDnsConfig? = null,
-)
+    val lastBootstrapResolution: BootstrapResolution? = null,
+) {
+    fun getRuntimeTunnelDnsConfig(): TunnelDnsConfig? {
+        return lastBootstrapResolution?.resolvedTunnelDnsConfig ?: tunnelDnsConfig
+    }
+}
