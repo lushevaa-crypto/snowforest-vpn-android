@@ -87,11 +87,10 @@ data class TunnelConfig(
 
     companion object {
 
-        fun tunnelConfFromQuick(amQuick: String, name: String? = null): TunnelConfig {
-            val config = Config.parseQuickString(amQuick)
+        fun fromConfig(config: Config, nameIfMissing: String? = null): TunnelConfig {
             return TunnelConfig(
-                name = config.name ?: name ?: config.defaultName(),
-                quickConfig = amQuick,
+                name = config.name ?: nameIfMissing ?: config.defaultName(),
+                quickConfig = config.asQuickString(),
             )
         }
 

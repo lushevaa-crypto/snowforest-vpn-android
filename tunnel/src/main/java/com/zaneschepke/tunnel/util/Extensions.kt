@@ -84,6 +84,13 @@ internal fun Map<PublicKey, DnsBootstrapResult>.toHostMap(
     familyOverride: FamilyOverride = FamilyOverride.MatchCurrent,
 ): Map<PublicKey, ResolvedHost> =
     mapNotNull { (pubKey, dns) ->
+            // Prefer IP4P if present
+            val ip4p = dns.ipv6.firstNotNullOfOrNull { DnsHostUtils.decodeIp4p(it) }
+            if (ip4p != null) {
+                val (ipv4, port) = ip4p
+                return@mapNotNull pubKey to ResolvedHost(host = ipv4, forcedPort = port)
+            }
+
             val host =
                 dns.selectHostForPeer(currentEndpoints[pubKey], familyOverride)
                     ?: return@mapNotNull null

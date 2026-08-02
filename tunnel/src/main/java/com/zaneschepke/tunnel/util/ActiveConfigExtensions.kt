@@ -15,12 +15,20 @@ internal fun ActiveConfig.findEndpointMismatches(
             val current = currentByKey[pubKey] ?: return@mapNotNull null
             val currentHost = current.host ?: return@mapNotNull null
 
-            val hasIp4p = dns.ipv6.any { DnsHostUtils.decodeIp4p(it) != null }
-            if (hasIp4p && familyOverride == FamilyOverride.ForceIpv6) return@mapNotNull null
+            // Prefer IP4P when present
+            val ip4p = dns.ipv6.firstNotNullOfOrNull { DnsHostUtils.decodeIp4p(it) }
+            if (ip4p != null) {
+                val (decodedIp, decodedPort) = ip4p
+                return@mapNotNull if (decodedIp != currentHost) {
+                    pubKey to ResolvedHost(host = decodedIp, forcedPort = decodedPort)
+                } else {
+                    null
+                }
+            }
 
+            // Normal path
             val freshHost =
                 dns.selectHostForPeer(current.endpoint, familyOverride) ?: return@mapNotNull null
-
             if (freshHost != currentHost) {
                 pubKey to ResolvedHost(host = freshHost)
             } else {

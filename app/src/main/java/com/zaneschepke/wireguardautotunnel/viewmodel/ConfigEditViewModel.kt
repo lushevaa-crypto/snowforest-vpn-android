@@ -130,13 +130,14 @@ class ConfigEditViewModel(
 
                 config.validate()
 
-                val quickConfig = config.asQuickString()
-
                 val tunnelConfig =
                     if (tunnelId == null) {
-                        TunnelConfig.tunnelConfFromQuick(quickConfig, state.draft.tunnelName)
+                        TunnelConfig.fromConfig(config, state.draft.tunnelName)
                     } else {
-                        state.tunnel?.copy(name = state.draft.tunnelName, quickConfig = quickConfig)
+                        state.tunnel?.copy(
+                            name = state.draft.tunnelName,
+                            quickConfig = config.asQuickString(),
+                        )
                     }
 
                 tunnelConfig?.let {
