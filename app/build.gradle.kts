@@ -30,7 +30,7 @@ licensee {
 }
 
 configure<ApplicationExtension> {
-    namespace = Constants.APP_ID
+    namespace = "com.zaneschepke.wireguardautotunnel"
     compileSdk = Constants.TARGET_SDK
 
     androidResources { generateLocaleConfig = true }
