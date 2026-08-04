@@ -1,7 +1,8 @@
 package com.zaneschepke.wireguardautotunnel.viewmodel
 
+import android.app.Application
 import android.net.Uri
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.dokar.sonner.ToastType
 import com.zaneschepke.wireguardautotunnel.R
@@ -17,6 +18,7 @@ import com.zaneschepke.wireguardautotunnel.domain.repository.TunnelRepository
 import com.zaneschepke.wireguardautotunnel.domain.sideeffect.GlobalSideEffect
 import com.zaneschepke.wireguardautotunnel.parser.Config
 import com.zaneschepke.wireguardautotunnel.parser.ConfigParseException
+import com.zaneschepke.wireguardautotunnel.routing.TunnelConfigUpdater
 import com.zaneschepke.wireguardautotunnel.service.ServiceManager
 import com.zaneschepke.wireguardautotunnel.service.autotunnel.AutoTunnelStateHolder
 import com.zaneschepke.wireguardautotunnel.ui.sideeffect.LocalSideEffect
@@ -55,6 +57,7 @@ import timber.log.Timber
 import xyz.teamgravity.pin_lock_compose.PinManager
 
 class SharedAppViewModel(
+    application: Application,
     private val appStateRepository: AppStateRepository,
     private val serviceManager: ServiceManager,
     private val tunnelCoordinator: TunnelCoordinator,
@@ -67,7 +70,7 @@ class SharedAppViewModel(
     private val httpClient: HttpClient,
     private val fileUtils: FileUtils,
     private val networkUtils: NetworkUtils,
-) : OrbitContainerHost<GlobalAppUiState, GlobalAppUiState, LocalSideEffect>, ViewModel() {
+) : OrbitContainerHost<GlobalAppUiState, GlobalAppUiState, LocalSideEffect>, AndroidViewModel(application) {
 
     val globalSideEffect = globalEffectRepository.flow
 
@@ -256,7 +259,26 @@ class SharedAppViewModel(
             val tunnelConfigs = configs.map { (quick, name) ->
                 val config = Config.parseQuickString(quick)
                 config.validate()
-                TunnelConfig.fromConfig(config, name)
+                val tunnelConfig = TunnelConfig.fromConfig(config, name)
+
+                // Snow Forest: Smart Routing — заменяем AllowedIPs на не-RU маршруты
+                when (val routeResult = TunnelConfigUpdater.applySmartRouting(
+                    getApplication(),
+                    tunnelConfig.quickConfig,
+                )) {
+                    is TunnelConfigUpdater.UpdateResult.Success -> {
+                        Timber.d("SF SmartRouting: ${routeResult.routeCount} routes from ${routeResult.source}")
+                        tunnelConfig.copy(quickConfig = routeResult.patchedConfig)
+                    }
+                    is TunnelConfigUpdater.UpdateResult.AlreadyPatched -> {
+                        Timber.d("SF SmartRouting: already applied, skipping")
+                        tunnelConfig
+                    }
+                    is TunnelConfigUpdater.UpdateResult.ValidationFailed -> {
+                        Timber.w("SF SmartRouting: validation failed (${routeResult.reason}), using original")
+                        tunnelConfig
+                    }
+                }
             }
             tunnelRepository.saveTunnelsUniquely(tunnelConfigs, state.tunnelNames.map { it.value })
         } catch (e: Exception) {
