@@ -25,6 +25,7 @@ import com.zaneschepke.wireguardautotunnel.ui.LocalIsAndroidTV
 private val DarkColorScheme =
     darkColorScheme(
         primary = ThemeColors.Dark.primary,
+        onPrimary = SnowForestOnPrimary,
         surface = ThemeColors.Dark.surface,
         background = ThemeColors.Dark.background,
         secondary = ThemeColors.Dark.secondary,
@@ -37,6 +38,7 @@ private val DarkColorScheme =
 private val LightColorScheme =
     lightColorScheme(
         primary = ThemeColors.Light.primary,
+        onPrimary = SnowForestOnPrimary,
         surface = ThemeColors.Light.surface,
         background = ThemeColors.Light.background,
         secondary = ThemeColors.Light.secondary,
@@ -103,7 +105,6 @@ fun WireguardAutoTunnelTheme(theme: Theme = Theme.AUTOMATIC, content: @Composabl
         SideEffect {
             val window = (view.context as Activity).window
             WindowCompat.setDecorFitsSystemWindows(window, false)
-            // For API 33+, use WindowInsetsControllerCompat for appearance control
             val insetsController = WindowInsetsControllerCompat(window, window.decorView)
             insetsController.isAppearanceLightStatusBars = !isDark
             insetsController.isAppearanceLightNavigationBars = !isDark
