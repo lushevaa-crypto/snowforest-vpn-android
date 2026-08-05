@@ -10,6 +10,13 @@ val Plantation = Color(0xFF2E3538)
 val Shark = Color(0xFF21272A)
 val BalticSea = Color(0xFF1C1B1F)
 
+// Snow Forest VPN colors
+val SnowForestPrimary = Color(0xFF00BCD4)       // Циан — кнопки, переключатели
+val SnowForestBackground = Color(0xFF0A1628)    // Тёмно-синий фон
+val SnowForestSurface = Color(0xFF081224)       // Фон карточек
+val SnowForestOnPrimary = Color(0xFF0A1628)     // Текст поверх кнопок
+val SnowForestAccent = Color(0xFF00E676)        // Зелёный акцент (статус, успех)
+
 // amoled
 val ElectricTeal = Color(0xFF4DD0E1)
 
@@ -39,19 +46,19 @@ sealed class ThemeColors(
         ThemeColors(
             background = LightGrey.copy(alpha = 0.95f),
             surface = OffWhite,
-            primary = Aqua,
+            primary = SnowForestPrimary,
             secondary = LightGrey,
-            onSurface = BalticSea,
+            onSurface = SnowForestBackground,
             outline = Plantation.copy(alpha = .75f),
-            onBackground = BalticSea,
+            onBackground = SnowForestBackground,
         )
 
     data object Dark :
         ThemeColors(
-            background = BalticSea,
-            surface = Shark,
-            primary = Aqua,
-            secondary = Plantation,
+            background = SnowForestBackground,
+            surface = SnowForestSurface,
+            primary = SnowForestPrimary,
+            secondary = Color(0xFF0D1E35),
             onSurface = OffWhite,
             outline = CoolGray,
             onBackground = OffWhite,
