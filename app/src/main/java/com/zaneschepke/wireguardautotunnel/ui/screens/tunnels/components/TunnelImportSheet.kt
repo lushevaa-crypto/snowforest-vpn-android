@@ -2,7 +2,6 @@ package com.zaneschepke.wireguardautotunnel.ui.screens.tunnels.components
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ContentPasteGo
-import androidx.compose.material.icons.outlined.Create
 import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.QrCode
@@ -25,13 +24,12 @@ fun TunnelImportSheet(
     onUrlClick: () -> Unit,
 ) {
     val isTv = LocalIsAndroidTV.current
-
     CustomBottomSheet(
         buildList {
             add(
                 SheetOption(
                     Icons.Outlined.FileOpen,
-                    stringResource(R.string.add_tunnels_text),
+                    "Импорт из файла",
                     onClick = {
                         onDismiss()
                         onFileClick()
@@ -42,7 +40,7 @@ fun TunnelImportSheet(
                 add(
                     SheetOption(
                         Icons.Outlined.QrCode,
-                        stringResource(R.string.add_from_qr),
+                        "Сканировать QR-код",
                         onClick = {
                             onDismiss()
                             onQrClick()
@@ -52,7 +50,7 @@ fun TunnelImportSheet(
             add(
                 SheetOption(
                     Icons.Outlined.ContentPasteGo,
-                    stringResource(R.string.add_from_clipboard),
+                    "Вставить из буфера",
                     onClick = {
                         onDismiss()
                         onClipboardClick()
@@ -62,23 +60,14 @@ fun TunnelImportSheet(
             add(
                 SheetOption(
                     Icons.Outlined.Link,
-                    stringResource(R.string.add_from_url),
+                    "Импорт по ссылке",
                     onClick = {
                         onDismiss()
                         onUrlClick()
                     },
                 )
             )
-            add(
-                SheetOption(
-                    Icons.Outlined.Create,
-                    stringResource(R.string.create_import),
-                    onClick = {
-                        onDismiss()
-                        onManualImportClick()
-                    },
-                )
-            )
+            // "Создать с нуля" убрано для обычных пользователей
         }
     ) {
         onDismiss()
