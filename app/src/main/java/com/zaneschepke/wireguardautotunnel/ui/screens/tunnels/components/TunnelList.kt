@@ -35,6 +35,7 @@ import com.zaneschepke.wireguardautotunnel.ui.common.button.SwitchWithDivider
 import com.zaneschepke.wireguardautotunnel.ui.navigation.Route
 import com.zaneschepke.wireguardautotunnel.ui.state.DisplayTunnelState
 import com.zaneschepke.wireguardautotunnel.ui.state.TunnelsUiState
+import com.zaneschepke.wireguardautotunnel.ui.sideeffect.LocalSideEffect
 import com.zaneschepke.wireguardautotunnel.util.extensions.openWebUrl
 import com.zaneschepke.wireguardautotunnel.viewmodel.SharedAppViewModel
 
@@ -82,7 +83,10 @@ fun TunnelList(
         if (uiState.tunnels.isEmpty()) {
             item {
                 GettingStartedSection(
-                    onClick = { context.openWebUrl(it) },
+                    onAddVpnClick = {
+                        viewModel.postSideEffect(LocalSideEffect.Sheet.ImportTunnels)
+                    },
+                    onVideoClick = { context.openWebUrl(it) },
                     modifier = Modifier.animateItem(),
                 )
             }
