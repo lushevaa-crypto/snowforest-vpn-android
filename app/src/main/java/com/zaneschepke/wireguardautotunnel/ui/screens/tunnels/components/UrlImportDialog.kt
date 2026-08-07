@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.zaneschepke.wireguardautotunnel.R
@@ -18,8 +19,17 @@ import com.zaneschepke.wireguardautotunnel.ui.common.textbox.ConfigurationTextBo
 
 @Composable
 fun UrlImportDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    val clipboardManager = LocalClipboardManager.current
     var url by remember { mutableStateOf("") }
     var isError by remember { mutableStateOf(false) }
+
+    // Автовставка URL из буфера обмена
+    LaunchedEffect(Unit) {
+        val clip = clipboardManager.getText()?.text ?: ""
+        if (clip.startsWith("https://") || clip.startsWith("http://")) {
+            url = clip
+        }
+    }
 
     LaunchedEffect(url) { isError = false }
 
@@ -44,7 +54,7 @@ fun UrlImportDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
         },
         confirmText = stringResource(R.string.okay),
         onAttest = {
-            if (url.isNotBlank() && url.startsWith("https://")) {
+            if (url.isNotBlank() && (url.startsWith("https://") || url.startsWith("http://"))) {
                 onConfirm(url)
             } else isError = true
         },
