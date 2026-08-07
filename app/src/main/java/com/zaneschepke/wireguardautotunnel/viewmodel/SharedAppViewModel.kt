@@ -259,7 +259,11 @@ class SharedAppViewModel(
             val tunnelConfigs = configs.map { (quick, name) ->
                 val config = Config.parseQuickString(quick)
                 config.validate()
-                val tunnelConfig = TunnelConfig.fromConfig(config, name)
+                // Snow Forest: читаем # Name из конфига если имя не задано
+                val sfName = name ?: quick.lines()
+                    .firstOrNull { it.trim().startsWith("# Name") || it.trim().startsWith("#Name") }
+                    ?.substringAfter("=")?.trim()
+                val tunnelConfig = TunnelConfig.fromConfig(config, sfName)
 
                 // Snow Forest: Smart Routing — заменяем AllowedIPs на не-RU маршруты
                 when (val routeResult = TunnelConfigUpdater.applySmartRouting(
