@@ -3,137 +3,172 @@ package com.zaneschepke.wireguardautotunnel.routing
 import android.content.Context
 import android.util.Log
 import com.zaneschepke.wireguardautotunnel.parser.Config
+import org.json.JSONObject
 import java.net.URL
 
 /**
  * Snow Forest VPN — Smart Routing
  *
- * Применяет умную маршрутизацию к конфигу при старте туннеля.
- * Оригинальный конфиг в БД НЕ ИЗМЕНЯЕТСЯ.
- * AllowedIPs меняется только в runtime.
+ * Логика: 0.0.0.0/0 минус российские подсети = весь мир кроме России.
  *
- * Источники RU подсетей (по приоритету):
- * 1. antifilter.download/list/ip.lst (основной, обновляется раз в 24ч)
+ * Источники RU подсетей:
+ * 1. RIPE NCC API (основной — полный официальный список)
  * 2. vpn.snowforest.xyz/routes.json (резервный)
- * 3. Локальный кэш (если источники недоступны)
- * 4. Оригинальный 0.0.0.0/0 (если кэша нет — VPN работает в full-tunnel режиме)
+ * 3. Локальный кэш в filesDir (обновляется при успешной загрузке)
+ * 4. При отсутствии всего — full tunnel 0.0.0.0/0 (VPN всё равно работает)
+ *
+ * Кэш: при старте используем кэш мгновенно, обновляем в фоне если > 24ч.
  */
 object SmartRoutingApplicator {
 
     private const val TAG = "SF_SmartRouting"
-    private const val PRIMARY_URL = "https://antifilter.download/list/ip.lst"
+    private const val PRIMARY_URL =
+        "https://stat.ripe.net/data/country-resource-list/data.json?resource=RU"
     private const val FALLBACK_URL = "https://vpn.snowforest.xyz/routes.json"
     private const val TIMEOUT_MS = 10_000
 
+    /**
+     * Применяет Smart Routing к конфигу при старте туннеля.
+     * Использует кэш немедленно — не блокирует подключение ожиданием сети.
+     * При любой ошибке возвращает оригинальный конфиг.
+     */
     fun apply(config: Config, context: Context): Config {
         return try {
             val startTime = System.currentTimeMillis()
+            val cache = RouteCache.read(context)
 
-            val ruPrefixes = getRuPrefixes(context)
+            // Определяем какой список использовать
+            val ruPrefixes = when {
+                cache != null -> {
+                    // Есть кэш — используем сразу, обновляем в фоне если устарел
+                    if (cache.isStale) {
+                        Log.d(TAG, "Cache stale (${cache.ageMs / 3600000}h) — will update in background")
+                        Thread { updateCache(context) }.start()
+                    } else {
+                        Log.d(TAG, "Cache fresh (${cache.ageMs / 3600000}h)")
+                    }
+                    cache.prefixes
+                }
+                else -> {
+                    // Нет кэша — пробуем скачать синхронно (первый запуск)
+                    Log.d(TAG, "No cache — downloading synchronously")
+                    val downloaded = downloadRuPrefixes()
+                    if (downloaded != null) {
+                        RouteCache.write(context, downloaded)
+                        downloaded
+                    } else {
+                        Log.w(TAG, "Download failed, no cache — using full tunnel")
+                        return config
+                    }
+                }
+            }
 
             if (ruPrefixes.isEmpty()) {
-                Log.w(TAG, "No RU prefixes available — using original AllowedIPs (full tunnel)")
+                Log.w(TAG, "Empty prefix list — using full tunnel")
                 return config
             }
 
             val routes = computeNonRuRoutes(ruPrefixes)
 
             if (routes.isEmpty()) {
-                Log.w(TAG, "Route computation failed — using original AllowedIPs")
+                Log.w(TAG, "Route computation failed — using full tunnel")
                 return config
             }
 
             val elapsed = System.currentTimeMillis() - startTime
-            Log.i(TAG, "Smart Routing applied: ${routes.size} routes in ${elapsed}ms")
+            Log.i(TAG, "SmartRouting: source=cache routes=${routes.size} elapsed=${elapsed}ms")
 
             val routeString = routes.joinToString(", ")
-            val patchedPeers = config.peers.map { peer ->
-                peer.copy(allowedIPs = routeString)
-            }
-
-            config.copy(peers = patchedPeers)
+            config.copy(peers = config.peers.map { it.copy(allowedIPs = routeString) })
 
         } catch (e: Exception) {
-            Log.e(TAG, "Smart Routing failed — using original AllowedIPs: ${e.message}")
+            Log.e(TAG, "SmartRouting failed — using full tunnel: ${e.message}")
             config
         }
     }
 
-    /**
-     * Получаем список RU подсетей:
-     * - Если кэш свежий (< 24ч) — используем кэш
-     * - Если кэш устарел или отсутствует — скачиваем с antifilter.download
-     * - При ошибке скачивания — используем устаревший кэш
-     * - Если кэша нет совсем — возвращаем пустой список (full tunnel)
-     */
-    private fun getRuPrefixes(context: Context): List<String> {
-        val cache = RouteCache.read(context)
-
-        // Кэш свежий — используем без скачивания
-        if (cache != null && !cache.isStale) {
-            Log.d(TAG, "Using fresh cache (age=${cache.ageMs / 1000}s)")
-            return cache.prefixes
-        }
-
-        // Кэш устарел или отсутствует — скачиваем
-        Log.d(TAG, "Cache ${if (cache == null) "missing" else "stale"} — downloading...")
-
-        val downloaded = downloadPrefixes()
-
-        return when {
-            downloaded != null -> {
-                Log.i(TAG, "Downloaded ${downloaded.size} RU prefixes from network")
-                RouteCache.write(context, downloaded)
-                downloaded
-            }
-            cache != null -> {
-                Log.w(TAG, "Download failed — using stale cache (age=${cache.ageMs / 1000}s)")
-                cache.prefixes
-            }
-            else -> {
-                Log.e(TAG, "No cache and no network — using full tunnel")
-                emptyList()
-            }
+    private fun updateCache(context: Context) {
+        val prefixes = downloadRuPrefixes()
+        if (prefixes != null) {
+            RouteCache.write(context, prefixes)
+            Log.i(TAG, "Background cache update: ${prefixes.size} prefixes")
+        } else {
+            Log.w(TAG, "Background cache update failed")
         }
     }
 
     /**
-     * Скачиваем список RU подсетей.
-     * Сначала primary, потом fallback.
+     * Скачивает список RU подсетей.
+     * Primary: RIPE NCC API (JSON формат)
+     * Fallback: наш сервер
      */
-    private fun downloadPrefixes(): List<String>? {
-        return downloadFrom(PRIMARY_URL) ?: downloadFrom(FALLBACK_URL)
+    private fun downloadRuPrefixes(): List<String>? {
+        return downloadFromRipe() ?: downloadFromFallback()
     }
 
-    private fun downloadFrom(url: String): List<String>? {
+    /**
+     * Скачиваем с RIPE NCC API.
+     * Формат: JSON {"data":{"resources":{"ipv4":["5.16.0.0/14","..."]}}}
+     * Есть CIDR ("5.16.0.0/14") и диапазоны ("31.135.244.0-31.135.251.255").
+     * Берём только CIDR, диапазоны отбрасываем.
+     */
+    private fun downloadFromRipe(): List<String>? {
         return try {
-            Log.d(TAG, "Downloading from $url")
-            val connection = URL(url).openConnection()
+            Log.d(TAG, "Downloading from RIPE API")
+            val connection = URL(PRIMARY_URL).openConnection()
+            connection.connectTimeout = TIMEOUT_MS
+            connection.readTimeout = TIMEOUT_MS
+            connection.setRequestProperty("Accept", "application/json")
+            val content = connection.getInputStream().bufferedReader().readText()
+
+            val json = JSONObject(content)
+            val ipv4Array = json
+                .getJSONObject("data")
+                .getJSONObject("resources")
+                .getJSONArray("ipv4")
+
+            val prefixes = mutableListOf<String>()
+            for (i in 0 until ipv4Array.length()) {
+                val entry = ipv4Array.getString(i)
+                // Берём только CIDR, отбрасываем диапазоны (содержат '-')
+                if (entry.contains('/') && !entry.contains('-')) {
+                    prefixes.add(entry)
+                }
+            }
+
+            Log.d(TAG, "RIPE: ${prefixes.size} CIDR prefixes")
+            if (prefixes.isEmpty()) null else prefixes
+
+        } catch (e: Exception) {
+            Log.w(TAG, "RIPE download failed: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Резервный источник — наш сервер (plain text, одна подсеть на строку).
+     */
+    private fun downloadFromFallback(): List<String>? {
+        return try {
+            Log.d(TAG, "Downloading from fallback: $FALLBACK_URL")
+            val connection = URL(FALLBACK_URL).openConnection()
             connection.connectTimeout = TIMEOUT_MS
             connection.readTimeout = TIMEOUT_MS
             val content = connection.getInputStream().bufferedReader().readText()
 
             val prefixes = content.lines()
                 .map { it.trim() }
-                .filter { it.isNotBlank() && !it.startsWith("#") }
-                .filter { it.matches(Regex("""\d+\.\d+\.\d+\.\d+/\d+""")) }
+                .filter { it.isNotBlank() && !it.startsWith("#") && it.contains('/') && !it.contains('-') }
 
-            if (prefixes.isEmpty()) {
-                Log.w(TAG, "Downloaded empty list from $url")
-                null
-            } else {
-                Log.d(TAG, "Downloaded ${prefixes.size} prefixes from $url")
-                prefixes
-            }
+            Log.d(TAG, "Fallback: ${prefixes.size} prefixes")
+            if (prefixes.isEmpty()) null else prefixes
+
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to download from $url: ${e.message}")
+            Log.w(TAG, "Fallback download failed: ${e.message}")
             null
         }
     }
 
-    /**
-     * Вычисляет маршруты: 0.0.0.0/0 минус RU подсети + ::/0
-     */
     private fun computeNonRuRoutes(ruPrefixes: List<String>): List<String> {
         var remaining = mutableListOf(IpRange(0L, 0xFFFFFFFFL))
 
