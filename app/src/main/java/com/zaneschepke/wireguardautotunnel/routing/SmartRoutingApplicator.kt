@@ -170,9 +170,18 @@ object SmartRoutingApplicator {
     }
 
     private fun computeNonRuRoutes(ruPrefixes: List<String>): List<String> {
+        // Фильтруем только крупные блоки (до /20) чтобы не превысить лимит Android Binder ~1MB
+        // Мелкие RU блоки (/21-/32) пойдут через VPN — небольшая потеря точности
+        val filteredPrefixes = ruPrefixes.filter { prefix ->
+            val mask = prefix.substringAfter('/').toIntOrNull() ?: 32
+            mask <= 20
+        }
+
+        Log.d(TAG, "RU prefixes after filter (<=20): ${filteredPrefixes.size} of ${ruPrefixes.size}")
+
         var remaining = mutableListOf(IpRange(0L, 0xFFFFFFFFL))
 
-        for (prefix in ruPrefixes) {
+        for (prefix in filteredPrefixes) {
             val parsed = parsePrefix(prefix) ?: continue
             val (network, mask) = parsed
             val size = 1L shl (32 - mask)
@@ -183,7 +192,18 @@ object SmartRoutingApplicator {
             remaining = newRemaining
         }
 
-        return remaining.flatMap { rangeToCidrs(it.start, it.end) } + listOf("::/0")
+        val routes = remaining.flatMap { rangeToCidrs(it.start, it.end) }
+
+        // Жёсткое ограничение: не более 5000 маршрутов чтобы не превысить Binder лимит
+        val limitedRoutes = if (routes.size > 5000) {
+            Log.w(TAG, "Routes count ${routes.size} exceeds limit, truncating to 5000")
+            routes.take(5000)
+        } else {
+            routes
+        }
+
+        Log.d(TAG, "Final routes: ${limitedRoutes.size}")
+        return limitedRoutes + listOf("::/0")
     }
 
     private fun subtractRange(range: IpRange, subStart: Long, subEnd: Long): List<IpRange> {
