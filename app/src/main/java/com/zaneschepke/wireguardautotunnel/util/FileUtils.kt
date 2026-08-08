@@ -191,12 +191,27 @@ class FileUtils(private val context: Context, private val ioDispatcher: Coroutin
     }
 
     private fun getFileName(uri: Uri): String {
+        // Логируем все данные URI для диагностики
+        val scheme = uri.scheme ?: "null"
+        val authority = uri.authority ?: "null"
+        val path = uri.path ?: "null"
+        val lastSegment = uri.lastPathSegment ?: "null"
+        val decoded = Uri.decode(lastSegment)
+
+        android.util.Log.d("SF_FileUtils", "URI scheme=$scheme authority=$authority")
+        android.util.Log.d("SF_FileUtils", "URI path=$path")
+        android.util.Log.d("SF_FileUtils", "URI lastPathSegment=$lastSegment")
+        android.util.Log.d("SF_FileUtils", "URI decoded=$decoded")
+
         // 1. Пробуем ContentResolver — работает для Files, Downloads
-        var name = getFileNameByCursor(uri) ?: ""
+        val fromCursor = getFileNameByCursor(uri)
+        android.util.Log.d("SF_FileUtils", "ContentResolver DISPLAY_NAME=$fromCursor")
+
+        var name = fromCursor ?: ""
 
         // 2. Fallback: Uri.decode(lastPathSegment) — как в оригинальном AmneziaWG TunnelImporter
         if (name.isEmpty()) {
-            name = Uri.decode(uri.lastPathSegment ?: "") ?: ""
+            name = decoded ?: ""
         }
 
         // 3. Берём только имя файла после последнего /
@@ -205,6 +220,7 @@ class FileUtils(private val context: Context, private val ioDispatcher: Coroutin
             name = name.substring(idx + 1)
         }
 
+        android.util.Log.d("SF_FileUtils", "Final filename=$name")
         return if (name.isNotEmpty()) name else NumberUtils.generateRandomTunnelName()
     }
 
