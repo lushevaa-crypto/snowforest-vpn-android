@@ -7,6 +7,7 @@ import com.zaneschepke.wireguardautotunnel.core.orchestration.ShortcutCoordinato
 import com.zaneschepke.wireguardautotunnel.core.orchestration.StartupCoordinator
 import com.zaneschepke.wireguardautotunnel.core.orchestration.TunnelBackendCoordinator
 import com.zaneschepke.wireguardautotunnel.core.orchestration.TunnelCoordinator
+import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.singleOf
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
@@ -19,6 +20,7 @@ val coordinatorModule = module {
     singleOf(::DnsSettingsCoordinator)
     single {
         TunnelCoordinator(
+            androidContext(),
             get(),
             get(),
             get(),
