@@ -1,58 +1,46 @@
 package com.zaneschepke.wireguardautotunnel.routing
 
 import android.content.Context
-import timber.log.Timber
+import android.util.Log
 
 /**
  * Применяет сгенерированные маршруты к quickConfig строке туннеля.
- *
- * Pipeline:
- * RouteSource → AllowedIPsGenerator → RouteValidator → TunnelConfigUpdater
+ * Pipeline: RouteSource → AllowedIPsGenerator → RouteValidator → TunnelConfigUpdater
  */
 object TunnelConfigUpdater {
 
-    private const val TAG = "TunnelConfigUpdater"
+    private const val TAG = "SF_TunnelConfigUpdater"
 
-    /**
-     * Основная точка входа. Вызывается при импорте конфига.
-     *
-     * @return UpdateResult с пропатченным конфигом или оригиналом при ошибке
-     */
     fun applySmartRouting(context: Context, quickConfig: String): UpdateResult {
-        Timber.tag(TAG).d("=== Snow Forest Smart Routing ===")
+        Log.d(TAG, "=== Snow Forest Smart Routing START ===")
+        Log.d(TAG, "Config length: ${quickConfig.length}")
 
-        // Проверка: уже применён Smart Routing?
         if (hasSmartRouting(quickConfig)) {
-            Timber.tag(TAG).d("Smart Routing already applied, skipping")
+            Log.d(TAG, "Smart Routing already applied, skipping")
             return UpdateResult.AlreadyPatched
         }
 
         val originalAllowedIPs = extractAllowedIPs(quickConfig)
-        Timber.tag(TAG).d("Original AllowedIPs: $originalAllowedIPs")
+        Log.d(TAG, "Original AllowedIPs: $originalAllowedIPs")
 
-        // Pipeline
         val source = StaticRouteSource(context)
         val generatorResult = AllowedIPsGenerator.generate(source)
+        Log.d(TAG, "Generator result: ${generatorResult.routeCount} routes, isFallback=${generatorResult.isFallback}")
 
         when (val validation = RouteValidator.validate(generatorResult)) {
             is RouteValidator.ValidationResult.Error -> {
-                Timber.tag(TAG).e("Validation failed: ${validation.reason}, keeping original config")
+                Log.e(TAG, "Validation failed: ${validation.reason}")
                 return UpdateResult.ValidationFailed(validation.reason)
             }
-            is RouteValidator.ValidationResult.Ok -> Unit
+            is RouteValidator.ValidationResult.Ok -> {
+                Log.d(TAG, "Validation OK")
+            }
         }
 
         val newAllowedIPs = generatorResult.allowedIPs.joinToString(", ")
         val patchedConfig = replaceAllowedIPs(quickConfig, newAllowedIPs)
 
-        Timber.tag(TAG).d(
-            """
-            Applied: OK
-            Route source: ${generatorResult.source}
-            Generated routes: ${generatorResult.routeCount}
-            Generation: ${generatorResult.generationMs}ms
-            """.trimIndent()
-        )
+        Log.d(TAG, "=== Smart Routing DONE: ${generatorResult.routeCount} routes applied ===")
 
         return UpdateResult.Success(
             patchedConfig = patchedConfig,
@@ -64,8 +52,8 @@ object TunnelConfigUpdater {
 
     private fun hasSmartRouting(quickConfig: String): Boolean {
         val allowedIPs = extractAllowedIPs(quickConfig) ?: return false
-        // Если AllowedIPs содержит много маршрутов — уже пропатчен
         val commaCount = allowedIPs.count { it == ',' }
+        Log.d(TAG, "hasSmartRouting check: commaCount=$commaCount")
         return commaCount > 10
     }
 
@@ -87,9 +75,7 @@ object TunnelConfigUpdater {
             val routeCount: Int,
             val source: String,
         ) : UpdateResult()
-
         object AlreadyPatched : UpdateResult()
-
         data class ValidationFailed(val reason: String) : UpdateResult()
     }
 }
