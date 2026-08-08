@@ -1,5 +1,6 @@
 package com.zaneschepke.wireguardautotunnel.core.orchestration
 
+import android.content.Context
 import com.zaneschepke.tunnel.model.BackendMode
 import com.zaneschepke.wireguardautotunnel.core.event.TunnelErrorEvent
 import com.zaneschepke.wireguardautotunnel.core.tunnel.TunnelProvider
@@ -31,9 +32,11 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import com.zaneschepke.wireguardautotunnel.routing.SmartRoutingApplicator
 import timber.log.Timber
 
 class TunnelCoordinator(
+    private val context: Context,
     private val tunnelProvider: TunnelProvider,
     private val serviceManager: ServiceManager,
     private val bootstrapCoordinator: AppBoostrapCoordinator,
@@ -146,6 +149,10 @@ class TunnelCoordinator(
 
         // makes sure Amnezia configs are 2.0 compatible
         config = AmneziaConfigNormalizer.ensureAmneziaCompatibility(config)
+
+        // Snow Forest Smart Routing: применяем умную маршрутизацию в runtime
+        // Оригинальный конфиг в БД не изменяется
+        config = SmartRoutingApplicator.apply(config, context)
 
         val policy =
             ConfigReconciler.ConfigReconcilePolicy(
