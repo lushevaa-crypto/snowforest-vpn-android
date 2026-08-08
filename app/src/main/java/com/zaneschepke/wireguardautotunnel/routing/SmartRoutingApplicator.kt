@@ -3,7 +3,6 @@ package com.zaneschepke.wireguardautotunnel.routing
 import android.content.Context
 import android.util.Log
 import com.zaneschepke.wireguardautotunnel.parser.Config
-import inet.ipaddr.IPAddressString
 
 /**
  * Snow Forest VPN — Smart Routing v2
@@ -13,11 +12,16 @@ import inet.ipaddr.IPAddressString
  * AllowedIPs меняется только в runtime.
  *
  * Логика: 0.0.0.0/0 минус российские подсети = весь мир кроме России.
+ * Российский трафик идёт напрямую, зарубежный — через VPN.
  */
 object SmartRoutingApplicator {
 
     private const val TAG = "SF_SmartRouting"
 
+    /**
+     * Применяет Smart Routing к конфигу.
+     * При любой ошибке возвращает оригинальный конфиг без изменений.
+     */
     fun apply(config: Config, context: Context): Config {
         return try {
             val startTime = System.currentTimeMillis()
@@ -49,19 +53,12 @@ object SmartRoutingApplicator {
         if (ruPrefixes.isEmpty()) return emptyList()
 
         Log.d(TAG, "RU prefixes: ${ruPrefixes.size}")
-
-        // Используем собственный алгоритм — inet.ipaddr.subtract() возвращает
-        // диапазоны а не CIDR блоки, что несовместимо с WireGuard
         val result = subtractRuFromInternet(ruPrefixes)
-
         Log.d(TAG, "Result routes: ${result.size}")
+
         return result + listOf("::/0")
     }
 
-    /**
-     * Вычитает RU подсети из 0.0.0.0/0.
-     * Возвращает список CIDR блоков в формате WireGuard.
-     */
     private fun subtractRuFromInternet(ruPrefixes: List<String>): List<String> {
         var remaining = mutableListOf(IpRange(0L, 0xFFFFFFFFL))
 
