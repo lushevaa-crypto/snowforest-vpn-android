@@ -191,7 +191,18 @@ class FileUtils(private val context: Context, private val ioDispatcher: Coroutin
     }
 
     private fun getFileName(uri: Uri): String {
-        return getFileNameByCursor(uri) ?: NumberUtils.generateRandomTunnelName()
+        // Сначала пробуем ContentResolver (работает для большинства источников)
+        val nameFromCursor = getFileNameByCursor(uri)
+        if (!nameFromCursor.isNullOrBlank()) return nameFromCursor
+
+        // Fallback: берём из lastPathSegment URI (работает для Telegram и других мессенджеров)
+        val lastSegment = uri.lastPathSegment
+        if (!lastSegment.isNullOrBlank()) {
+            val fileName = lastSegment.substringAfterLast("/").substringAfterLast(":")
+            if (fileName.contains(".")) return fileName
+        }
+
+        return NumberUtils.generateRandomTunnelName()
     }
 
     private fun getNameFromFileName(fileName: String): String {
