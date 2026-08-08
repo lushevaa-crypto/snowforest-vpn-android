@@ -191,34 +191,24 @@ class FileUtils(private val context: Context, private val ioDispatcher: Coroutin
     }
 
     private fun getFileName(uri: Uri): String {
-        // Сначала пробуем ContentResolver (работает для большинства источников)
-        val nameFromCursor = getFileNameByCursor(uri)
-        if (!nameFromCursor.isNullOrBlank()) return nameFromCursor
+        // 1. Пробуем ContentResolver — работает для Files, Downloads
+        var name = getFileNameByCursor(uri) ?: ""
 
-        // Fallback: берём из lastPathSegment URI (работает для Telegram и других мессенджеров)
-        val lastSegment = uri.lastPathSegment
-        if (!lastSegment.isNullOrBlank()) {
-            val fileName = lastSegment.substringAfterLast("/").substringAfterLast(":")
-            if (fileName.contains(".")) return fileName
+        // 2. Fallback: Uri.decode(lastPathSegment) — как в оригинальном AmneziaWG TunnelImporter
+        if (name.isEmpty()) {
+            name = Uri.decode(uri.lastPathSegment ?: "") ?: ""
         }
 
-        return NumberUtils.generateRandomTunnelName()
-    }
-
-    private fun getNameFromFileName(fileName: String): String {
-        return fileName.take(fileName.lastIndexOf('.'))
-    }
-
-    private fun getFileExtensionFromFileName(fileName: String): String? {
-        return try {
-            fileName.substring(fileName.lastIndexOf('.'))
-        } catch (e: Exception) {
-            Timber.e(e)
-            null
+        // 3. Берём только имя файла после последнего /
+        val idx = name.lastIndexOf('/')
+        if (idx >= 0 && idx < name.length - 1) {
+            name = name.substring(idx + 1)
         }
+
+        return if (name.isNotEmpty()) name else NumberUtils.generateRandomTunnelName()
     }
 
-    private fun getFileNameByCursor(uri: Uri): String? {
+        private fun getFileNameByCursor(uri: Uri): String? {
         return context.contentResolver.query(uri, null, null, null, null)?.use {
             getDisplayNameByCursor(it)
         }
