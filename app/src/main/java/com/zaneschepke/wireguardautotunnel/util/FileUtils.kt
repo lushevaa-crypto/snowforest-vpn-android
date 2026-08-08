@@ -208,7 +208,20 @@ class FileUtils(private val context: Context, private val ioDispatcher: Coroutin
         return if (name.isNotEmpty()) name else NumberUtils.generateRandomTunnelName()
     }
 
-        private fun getFileNameByCursor(uri: Uri): String? {
+    private fun getNameFromFileName(fileName: String): String {
+        return fileName.take(fileName.lastIndexOf('.'))
+    }
+
+    private fun getFileExtensionFromFileName(fileName: String): String? {
+        return try {
+            fileName.substring(fileName.lastIndexOf('.'))
+        } catch (e: Exception) {
+            Timber.e(e)
+            null
+        }
+    }
+
+    private fun getFileNameByCursor(uri: Uri): String? {
         return context.contentResolver.query(uri, null, null, null, null)?.use {
             getDisplayNameByCursor(it)
         }
