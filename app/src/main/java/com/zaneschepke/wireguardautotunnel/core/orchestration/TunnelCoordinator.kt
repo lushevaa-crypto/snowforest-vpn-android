@@ -158,23 +158,38 @@ class TunnelCoordinator(
         config = SmartRoutingApplicator.apply(config, context)
 
         // Snow Forest App Bypass: применяем bypass_packages из DataStore в runtime
-        // DataStore — единственный источник истины (UI SplitTunnel тоже пишет в DataStore)
-        // Оригинальный конфиг в БД не изменяется
+        // DataStore — единственный источник истины.
+        // Различаем три состояния:
+        //   null     → пользователь ещё не настраивал (до инициализации) → не применяем
+        //   emptySet → пользователь сознательно отключил всё → не применяем (full tunnel)
+        //   {pkgs}   → нормальная работа → применяем
+        val initialized = dataStoreManager.getFromStore(BypassAppsInitializer.bypassAppsInitialized) == true
         val bypassPkgs = dataStoreManager.getFromStore(BypassAppsInitializer.bypassPackages)
         val configPkgs = config.`interface`.excludedApplications
-        android.util.Log.d("SF_Bypass", "datastore packages=${bypassPkgs?.size ?: 0}")
+
+        android.util.Log.d("SF_Bypass", "initialized=$initialized")
+        android.util.Log.d("SF_Bypass", "datastore packages=${bypassPkgs?.size ?: "null"}")
         android.util.Log.d("SF_Bypass", "config packages=${configPkgs?.size ?: 0}")
-        if (!bypassPkgs.isNullOrEmpty()) {
-            android.util.Log.d("SF_Bypass", "applied packages=${bypassPkgs.size}")
-            android.util.Log.d("SF_Bypass", "list=$bypassPkgs")
-            val editableInterface = com.zaneschepke.wireguardautotunnel.ui.state.EditableInterface.from(config.`interface`)
-            val updatedInterface = editableInterface.copy(
-                excludedApplications = bypassPkgs,
-                includedApplications = emptySet(),
-            )
-            config = com.zaneschepke.wireguardautotunnel.ui.state.EditableConfig.from(config)
-                .copy(`interface` = updatedInterface)
-                .buildConfig()
+
+        if (initialized && bypassPkgs != null) {
+            if (bypassPkgs.isEmpty()) {
+                // Пользователь сознательно отключил все исключения
+                android.util.Log.d("SF_Bypass", "app bypass disabled by user")
+            } else {
+                // Применяем пользовательский список
+                android.util.Log.d("SF_Bypass", "applied packages=${bypassPkgs.size}")
+                android.util.Log.d("SF_Bypass", "list=$bypassPkgs")
+                val editableInterface = com.zaneschepke.wireguardautotunnel.ui.state.EditableInterface.from(config.`interface`)
+                val updatedInterface = editableInterface.copy(
+                    excludedApplications = bypassPkgs,
+                    includedApplications = emptySet(),
+                )
+                config = com.zaneschepke.wireguardautotunnel.ui.state.EditableConfig.from(config)
+                    .copy(`interface` = updatedInterface)
+                    .buildConfig()
+            }
+        } else if (!initialized) {
+            android.util.Log.d("SF_Bypass", "not initialized yet — skip")
         }
 
         val policy =
