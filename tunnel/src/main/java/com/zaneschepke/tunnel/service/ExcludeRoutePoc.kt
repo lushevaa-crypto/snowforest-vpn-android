@@ -15,8 +15,8 @@ import android.util.Log
  */
 object ExcludeRoutePoc {
 
-    // ← МЕНЯЙ ЭТУ СТРОКУ для каждого теста
-    const val ACTIVE_POC = POC_475
+    // ← МЕНЯЙ ЭТУ СТРОКУ для каждого теста (1=475, 2=2000, 3=5000, 4=FULL, 0=выкл)
+    const val ACTIVE_POC = 1
 
     const val POC_DISABLED = 0   // excludeRoute выключен — обычный full tunnel
     const val POC_475      = 1   // 475 реальных RU подсетей
