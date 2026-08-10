@@ -27,7 +27,7 @@ object ExcludeRoutePoc {
     private const val TAG = "SF_POC"
 
     fun applyExcludeRoutes(
-        builder: android.net.VpnService.Builder,
+        vpnServiceBuilder: android.net.VpnService.Builder,
         sdkInt: Int,
     ) {
         // Детальный лог окружения — для сравнения между устройствами
@@ -60,7 +60,7 @@ object ExcludeRoutePoc {
                 if (parts.size == 2) {
                     val addr = java.net.InetAddress.getByName(parts[0])
                     val prefix = parts[1].toInt()
-                    builder.excludeRoute(android.net.IpPrefix(addr, prefix))
+                    vpnServiceBuilder.excludeRoute(android.net.IpPrefix(addr, prefix))
                     excludeCount++
                 }
             }
