@@ -152,7 +152,8 @@ class TunnelCoordinator(
 
         // Snow Forest Smart Routing: применяем умную маршрутизацию в runtime
         // Оригинальный конфиг в БД не изменяется
-        config = SmartRoutingApplicator.apply(config, context)
+        // POC: SmartRoutingApplicator отключён — используем excludeRoute() вместо
+        // config = SmartRoutingApplicator.apply(config, context)
 
         val policy =
             ConfigReconciler.ConfigReconcilePolicy(
