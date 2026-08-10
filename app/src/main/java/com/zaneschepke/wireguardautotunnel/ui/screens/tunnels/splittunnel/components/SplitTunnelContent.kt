@@ -21,6 +21,14 @@ fun SplitTunnelContent(
     onSplitOptionChange: (SplitOption) -> Unit,
     onAppSelectionToggle: (String, Boolean) -> Unit,
 ) {
+    // Snow Forest: всегда используем EXCLUDE режим (приложения без VPN)
+    // Технический переключатель ALL/INCLUDE/EXCLUDE скрыт от пользователя
+    val effectiveConfig = if (splitConfig.first == SplitOption.ALL) {
+        SplitOption.EXCLUDE to splitConfig.second
+    } else {
+        splitConfig
+    }
+
     Column(
         verticalArrangement = Arrangement.spacedBy(24.dp, Alignment.Top),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -28,26 +36,14 @@ fun SplitTunnelContent(
     ) {
         Column {
             GroupLabel(
-                stringResource(R.string.mode),
+                stringResource(R.string.bypass_apps_section),
                 modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp),
             )
-            SplitOptionSelector(
-                selectedOption = splitConfig.first,
-                onOptionChange = onSplitOptionChange,
+            AppListSection(
+                installedPackages = installedPackages,
+                onAppSelectionToggle = onAppSelectionToggle,
+                splitConfig = effectiveConfig,
             )
-        }
-        if (splitConfig.first != SplitOption.ALL) {
-            Column {
-                GroupLabel(
-                    stringResource(R.string.app_selection),
-                    modifier = Modifier.padding(16.dp).padding(bottom = 8.dp),
-                )
-                AppListSection(
-                    installedPackages = installedPackages,
-                    onAppSelectionToggle = onAppSelectionToggle,
-                    splitConfig = splitConfig,
-                )
-            }
         }
     }
 }
