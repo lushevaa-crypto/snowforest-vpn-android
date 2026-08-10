@@ -22,6 +22,7 @@ val coordinatorModule = module {
     single {
         TunnelCoordinator(
             androidContext(),
+            get(), // DataStoreManager
             get(),
             get(),
             get(),
@@ -38,7 +39,7 @@ val coordinatorModule = module {
         BypassAppsInitializer(
             context = androidContext(),
             dataStoreManager = get(),
-            tunnelRepository = get(),
+            packageRepository = get(),
         )
     }
     singleOf(::AppBoostrapCoordinator)
