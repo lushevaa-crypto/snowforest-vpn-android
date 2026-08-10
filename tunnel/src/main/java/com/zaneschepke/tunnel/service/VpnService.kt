@@ -275,7 +275,7 @@ class VpnService : android.net.VpnService(), KillSwitch, SocketProtector {
                     // ===== Snow Forest excludeRoute() POC — удалить после тестирования =====
                     if (sawDefaultRoute) {
                         com.zaneschepke.wireguardautotunnel.routing.ExcludeRoutePoc.applyExcludeRoutes(
-                            builder = this,
+                            vpnServiceBuilder = this,
                             sdkInt = android.os.Build.VERSION.SDK_INT,
                         )
                     }
