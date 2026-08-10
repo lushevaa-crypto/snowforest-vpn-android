@@ -135,7 +135,7 @@
     <string name="auto_tunnel_channel_id" translatable="false">Auto-tunnel Channel</string>
     <string name="auto_tunnel_channel_description">Уведомления об автоподключении.</string>
     <string name="stop">Остановить</string>
-    <string name="splt_tunneling">Split tunneling приложений</string>
+    <string name="splt_tunneling">Без VPN</string>
     <string name="show_scripts">Показать скрипты</string>
     <string name="pre_up">Pre up</string>
     <string name="post_up">Post up</string>
@@ -547,4 +547,12 @@
     <string name="tunnel_dns">DNS подключения</string>
     <string name="use_tunnel_dns_servers">Использовать DNS серверы подключения</string>
     <string name="error_config_missing_dns">Подключение %1$s не содержит DNS серверы, которые требуются в текущих настройках</string>
+    <!-- Snow Forest App Bypass -->
+    <string name="bypass_apps_title">Без VPN</string>
+    <string name="bypass_apps_description">Выбранные приложения и сайты подключаются напрямую без VPN</string>
+    <string name="bypass_apps_section">Приложения</string>
+    <string name="bypass_sites_section">Сайты</string>
+    <string name="bypass_sites_coming_soon">Скоро: обход VPN для отдельных сайтов</string>
+    <string name="bypass_app_add">Добавить приложение</string>
 </resources>
+
