@@ -259,10 +259,32 @@ class SharedAppViewModel(
             val tunnelConfigs = configs.map { (quick, name) ->
                 val config = Config.parseQuickString(quick)
                 config.validate()
-                // Snow Forest: читаем # Name из конфига если имя не задано
-                val sfName = name ?: quick.lines()
-                    .firstOrNull { it.trim().startsWith("# Name") || it.trim().startsWith("#Name") }
-                    ?.substringAfter("=")?.trim()
+
+                // Snow Forest: определяем имя туннеля с правильными приоритетами
+                // 1. # SF-Name из содержимого конфига (надёжнее всего — работает при любом источнике)
+                // 2. # Name из содержимого конфига (обратная совместимость)
+                // 3. Имя файла из URI — только если не Telegram-мусор (2_538860762...)
+                // 4. config.defaultName() — через TunnelConfig.fromConfig(config, null)
+                val sfName: String? = run {
+                    // Читаем метаданные из содержимого
+                    val fromContent = quick.lines()
+                        .firstOrNull { line ->
+                            val t = line.trim()
+                            t.startsWith("# SF-Name") || t.startsWith("#SF-Name") ||
+                            t.startsWith("# Name") || t.startsWith("#Name")
+                        }
+                        ?.substringAfter("=")?.trim()
+                        ?.takeIf { it.isNotBlank() }
+
+                    if (fromContent != null) return@run fromContent
+
+                    // Имя файла — только если не Telegram-мусор
+                    val isCleanFileName = name != null &&
+                        !name.matches(Regex("""\d+_\d+.*"""))
+                    if (isCleanFileName) return@run name
+
+                    null // → TunnelConfig.fromConfig использует config.defaultName()
+                }
                 val tunnelConfig = TunnelConfig.fromConfig(config, sfName)
 
                 // Snow Forest: Smart Routing — заменяем AllowedIPs на не-RU маршруты
