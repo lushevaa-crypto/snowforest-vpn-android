@@ -226,9 +226,8 @@ class VpnService : android.net.VpnService(), KillSwitch, SocketProtector {
         val intent = backend.applicationProvider.createVpnConfigurePendingIntent(this@VpnService)
         vpnTunFd?.close()
         vpnTunFd = null
-        val tunBuilder = Builder()
         vpnTunFd =
-            tunBuilder
+            Builder()
                 .apply {
                     setSession(tunnel.name)
                     setConfigureIntent(intent)
@@ -273,14 +272,6 @@ class VpnService : android.net.VpnService(), KillSwitch, SocketProtector {
                             }
                     }
 
-                    // ===== Snow Forest excludeRoute() POC — удалить после тестирования =====
-                    if (sawDefaultRoute) {
-                        ExcludeRoutePoc.applyExcludeRoutes(
-                            vpnServiceBuilder = tunBuilder,
-                            sdkInt = android.os.Build.VERSION.SDK_INT,
-                        )
-                    }
-                    // ===== END POC =====
 
                     // "Kill-switch" semantics (mirrors wireguard-android)
                     val isKillSwitchRouting = sawDefaultRoute && config.peers.size == 1
@@ -380,3 +371,4 @@ class VpnService : android.net.VpnService(), KillSwitch, SocketProtector {
         const val HEV_BRIDGE_TRAFFIC_TAG = 0xF00D
     }
 }
+
