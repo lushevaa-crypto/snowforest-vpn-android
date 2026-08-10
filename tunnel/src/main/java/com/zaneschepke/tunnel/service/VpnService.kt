@@ -273,31 +273,11 @@ class VpnService : android.net.VpnService(), KillSwitch, SocketProtector {
                     }
 
                     // ===== Snow Forest excludeRoute() POC — удалить после тестирования =====
-                    // Тестируем: addRoute(0/0) + excludeRoute(RU) на Android 13+
-                    // Переключай ExcludeRoutePoc.ACTIVE_POC для разных тестов
-                    if (sawDefaultRoute &&
-                        android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
-                        com.zaneschepke.wireguardautotunnel.routing.ExcludeRoutePoc.ACTIVE_POC != com.zaneschepke.wireguardautotunnel.routing.ExcludeRoutePoc.POC_DISABLED
-                    ) {
-                        val startTime = System.currentTimeMillis()
-                        var excludeCount = 0
-                        val prefixes = com.zaneschepke.wireguardautotunnel.routing.ExcludeRoutePoc.getPrefixes()
-                        android.util.Log.i("SF_POC", "excludeRoute POC start: ${prefixes.size} prefixes")
-                        try {
-                            prefixes.forEach { cidr ->
-                                val parts = cidr.trim().split("/")
-                                if (parts.size == 2) {
-                                    val addr = java.net.InetAddress.getByName(parts[0])
-                                    val prefix = parts[1].toInt()
-                                    excludeRoute(android.net.IpPrefix(addr, prefix))
-                                    excludeCount++
-                                }
-                            }
-                            val elapsed = System.currentTimeMillis() - startTime
-                            android.util.Log.i("SF_POC", "excludeRoute POC SUCCESS: count=$excludeCount elapsed=${elapsed}ms")
-                        } catch (e: Exception) {
-                            android.util.Log.e("SF_POC", "excludeRoute POC FAILED after $excludeCount calls: ${e::class.simpleName}: ${e.message}")
-                        }
+                    if (sawDefaultRoute) {
+                        com.zaneschepke.wireguardautotunnel.routing.ExcludeRoutePoc.applyExcludeRoutes(
+                            builder = this,
+                            sdkInt = android.os.Build.VERSION.SDK_INT,
+                        )
                     }
                     // ===== END POC =====
 
