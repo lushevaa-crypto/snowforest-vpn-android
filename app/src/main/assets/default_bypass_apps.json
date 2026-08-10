@@ -1,69 +1,10 @@
 [
-  {
-    "name": "Сбербанк",
-    "packages": [
-      "ru.sberbankmobile"
-    ]
-  },
-  {
-    "name": "Тинькофф",
-    "packages": [
-      "com.idamob.tinkoff.android"
-    ]
-  },
-  {
-    "name": "ВТБ",
-    "packages": [
-      "ru.vtb24.mobilebanking.android"
-    ]
-  },
-  {
-    "name": "Альфа-Банк",
-    "packages": [
-      "ru.alfabank.mobile.android"
-    ]
-  },
-  {
-    "name": "Госуслуги",
-    "packages": [
-      "ru.rostel",
-      "ru.gosuslugi.pos"
-    ]
-  },
-  {
-    "name": "Wildberries",
-    "packages": [
-      "com.wildberries.ru"
-    ]
-  },
-  {
-    "name": "Ozon",
-    "packages": [
-      "ru.ozon.app.android"
-    ]
-  },
-  {
-    "name": "ВКонтакте",
-    "packages": [
-      "com.vkontakte.android"
-    ]
-  },
-  {
-    "name": "Одноклассники",
-    "packages": [
-      "ru.ok.android"
-    ]
-  },
-  {
-    "name": "Яндекс Такси",
-    "packages": [
-      "ru.yandex.taxi"
-    ]
-  },
-  {
-    "name": "Авито",
-    "packages": [
-      "com.avito.android"
-    ]
-  }
+  {"name": "Сбербанк", "packages": ["ru.sberbankmobile"]},
+  {"name": "ВТБ", "packages": ["ru.vtb24.mobilebanking.android"]},
+  {"name": "Альфа-Банк", "packages": ["ru.alfabank.mobile.android"]},
+  {"name": "Госуслуги", "packages": ["ru.rostel", "ru.gosuslugi.pos"]},
+  {"name": "Госуслуги Авто", "packages": ["ru.gosuslugi.auto"]},
+  {"name": "Wildberries", "packages": ["com.wildberries.ru"]},
+  {"name": "Ozon", "packages": ["ru.ozon.app.android"]},
+  {"name": "Яндекс Такси", "packages": ["ru.yandex.taxi"]}
 ]
