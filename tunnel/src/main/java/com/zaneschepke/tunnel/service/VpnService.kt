@@ -272,6 +272,33 @@ class VpnService : android.net.VpnService(), KillSwitch, SocketProtector {
                             }
                     }
 
+                    // Snow Forest Smart Routing POC: excludeRoute() для RU подсетей
+                    // Работает только на Android 13+ (API 33)
+                    // При sawDefaultRoute=true (full tunnel) исключаем RU подсети напрямую
+                    if (sawDefaultRoute && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                        val startTime = System.currentTimeMillis()
+                        var excludeCount = 0
+                        android.util.Log.i("SF_excludeRoute", "=== Smart Routing POC START ===")
+                        android.util.Log.i("SF_excludeRoute", "Applying ${com.zaneschepke.wireguardautotunnel.routing.RuCidrList.prefixes.size} excludeRoute() calls")
+                        try {
+                            com.zaneschepke.wireguardautotunnel.routing.RuCidrList.prefixes.forEach { cidr ->
+                                val parts = cidr.split("/")
+                                if (parts.size == 2) {
+                                    val addr = java.net.InetAddress.getByName(parts[0])
+                                    val prefix = parts[1].toInt()
+                                    val ipPrefix = android.net.IpPrefix(addr, prefix)
+                                    excludeRoute(ipPrefix)
+                                    excludeCount++
+                                }
+                            }
+                            val elapsed = System.currentTimeMillis() - startTime
+                            android.util.Log.i("SF_excludeRoute", "=== Smart Routing POC DONE ===")
+                            android.util.Log.i("SF_excludeRoute", "excludeCount=$excludeCount elapsed=${elapsed}ms")
+                        } catch (e: Exception) {
+                            android.util.Log.e("SF_excludeRoute", "excludeRoute FAILED after $excludeCount calls: ${e.message}")
+                        }
+                    }
+
                     // "Kill-switch" semantics (mirrors wireguard-android)
                     val isKillSwitchRouting = sawDefaultRoute && config.peers.size == 1
 
