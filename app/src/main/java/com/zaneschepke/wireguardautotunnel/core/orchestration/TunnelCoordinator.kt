@@ -161,9 +161,12 @@ class TunnelCoordinator(
         // DataStore — единственный источник истины (UI SplitTunnel тоже пишет в DataStore)
         // Оригинальный конфиг в БД не изменяется
         val bypassPkgs = dataStoreManager.getFromStore(BypassAppsInitializer.bypassPackages)
+        val configPkgs = config.`interface`.excludedApplications
+        android.util.Log.d("SF_Bypass", "datastore packages=${bypassPkgs?.size ?: 0}")
+        android.util.Log.d("SF_Bypass", "config packages=${configPkgs?.size ?: 0}")
         if (!bypassPkgs.isNullOrEmpty()) {
-            android.util.Log.d("SF_Bypass", "Applying ${bypassPkgs.size} bypass packages")
-            android.util.Log.d("SF_Bypass", "packages=$bypassPkgs")
+            android.util.Log.d("SF_Bypass", "applied packages=${bypassPkgs.size}")
+            android.util.Log.d("SF_Bypass", "list=$bypassPkgs")
             val editableInterface = com.zaneschepke.wireguardautotunnel.ui.state.EditableInterface.from(config.`interface`)
             val updatedInterface = editableInterface.copy(
                 excludedApplications = bypassPkgs,
