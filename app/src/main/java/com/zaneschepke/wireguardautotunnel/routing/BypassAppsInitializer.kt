@@ -3,87 +3,69 @@ package com.zaneschepke.wireguardautotunnel.routing
 import android.content.Context
 import android.util.Log
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.zaneschepke.wireguardautotunnel.data.DataStoreManager
-import com.zaneschepke.wireguardautotunnel.domain.repository.TunnelRepository
-import com.zaneschepke.wireguardautotunnel.ui.screens.tunnels.splittunnel.state.SplitOption
-import com.zaneschepke.wireguardautotunnel.ui.state.EditableConfig
-import com.zaneschepke.wireguardautotunnel.ui.state.EditableInterface
-import kotlinx.coroutines.flow.first
+import com.zaneschepke.wireguardautotunnel.domain.repository.InstalledPackageRepository
 import org.json.JSONArray
 
 /**
  * Snow Forest VPN — инициализация App Bypass
  *
- * Запускается один раз при первом старте приложения.
- * Читает default_bypass_apps.json из assets и применяет
- * excludedApplications ко всем туннелям.
+ * Запускается ОДИН РАЗ при первом старте.
+ * Читает default_bypass_apps.json → проверяет установленные пакеты
+ * → сохраняет только существующие в DataStore.
  *
- * После инициализации флаг bypass_apps_initialized сохраняется в DataStore.
- * Пользовательские изменения не перезаписываются никогда.
+ * Туннели и конфиги НЕ изменяет.
+ * DataStore — единственное место хранения bypass_packages.
  */
 class BypassAppsInitializer(
     private val context: Context,
     private val dataStoreManager: DataStoreManager,
-    private val tunnelRepository: TunnelRepository,
+    private val packageRepository: InstalledPackageRepository,
 ) {
-
-    private val TAG = "SF_BypassApps"
-
     companion object {
         val bypassAppsInitialized = booleanPreferencesKey("bypass_apps_initialized")
+        val bypassPackages = stringSetPreferencesKey("bypass_packages")
+        private const val TAG = "SF_BypassApps"
     }
 
     suspend fun initializeIfNeeded() {
         val alreadyInitialized = dataStoreManager.getFromStore(bypassAppsInitialized) == true
         if (alreadyInitialized) {
-            Log.d(TAG, "Bypass apps already initialized, skipping")
+            Log.d(TAG, "Already initialized, skipping")
             return
         }
 
         Log.i(TAG, "First launch — initializing bypass apps")
 
-        val defaultPackages = loadDefaultBypassApps()
+        val defaultPackages = loadDefaultPackages()
         if (defaultPackages.isEmpty()) {
             Log.e(TAG, "Failed to load default_bypass_apps.json")
             return
         }
 
-        Log.i(TAG, "Loaded ${defaultPackages.size} default bypass apps")
+        // Получаем установленные пакеты и фильтруем
+        val installed = packageRepository.getInstalledPackages()
+            .map { it.packageName }
+            .toSet()
 
-        // Применяем ко всем существующим туннелям
-        val tunnels = tunnelRepository.flow.first()
-        tunnels.forEach { tunnel ->
-            try {
-                val config = tunnel.getConfig()
-                // Не перезаписываем если пользователь уже настроил исключения
-                val hasExistingExclusions = config.`interface`.excludedApplications?.isNotEmpty() == true
-                val hasExistingInclusions = config.`interface`.includedApplications?.isNotEmpty() == true
-                if (hasExistingExclusions || hasExistingInclusions) {
-                    Log.d(TAG, "Tunnel ${tunnel.name} already has split tunnel config, skipping")
-                    return@forEach
-                }
+        val toSave = defaultPackages.filter { it in installed }.toSet()
 
-                val editableConfig = EditableConfig.from(config)
-                val editableInterface = EditableInterface.from(config.`interface`)
-                val updatedInterface = editableInterface.copy(
-                    excludedApplications = defaultPackages.toSet(),
-                    includedApplications = emptySet(),
-                )
-                val updatedConfig = editableConfig.copy(`interface` = updatedInterface).buildConfig()
-                tunnelRepository.save(
-                    tunnel.copy(quickConfig = updatedConfig.withName(tunnel.name).asQuickString())
-                )
-                Log.i(TAG, "Applied ${defaultPackages.size} bypass apps to tunnel: ${tunnel.name}")
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to apply bypass apps to tunnel ${tunnel.name}: ${e.message}")
-            }
-        }
+        Log.i(TAG, "Default packages: ${defaultPackages.size}, " +
+            "installed: ${installed.size}, saving: ${toSave.size}")
+        Log.d(TAG, "Saving bypass packages: $toSave")
 
+        dataStoreManager.saveToDataStore(bypassPackages, toSave)
         dataStoreManager.saveToDataStore(bypassAppsInitialized, true)
+
         Log.i(TAG, "Bypass apps initialization complete")
     }
 
-    private fun loadDefaultBypassApps(): List<String> {
+    /**
+     * Загружает все package ID из default_bypass_apps.json.
+     * Формат: [{"name": "Сбербанк", "packages": ["ru.sberbankmobile"]}, ...]
+     */
+    private fun loadDefaultPackages(): List<String> {
         return try {
             val json = context.assets.open("default_bypass_apps.json")
                 .bufferedReader().readText()
@@ -91,7 +73,10 @@ class BypassAppsInitializer(
             val packages = mutableListOf<String>()
             for (i in 0 until array.length()) {
                 val obj = array.getJSONObject(i)
-                packages.add(obj.getString("package"))
+                val pkgArray = obj.getJSONArray("packages")
+                for (j in 0 until pkgArray.length()) {
+                    packages.add(pkgArray.getString(j))
+                }
             }
             packages
         } catch (e: Exception) {
