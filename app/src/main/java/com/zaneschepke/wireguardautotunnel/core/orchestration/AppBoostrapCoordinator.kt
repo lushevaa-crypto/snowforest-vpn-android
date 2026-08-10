@@ -9,6 +9,7 @@ import com.zaneschepke.wireguardautotunnel.domain.repository.GeneralSettingRepos
 import com.zaneschepke.wireguardautotunnel.domain.repository.LockdownSettingsRepository
 import com.zaneschepke.wireguardautotunnel.domain.repository.MonitoringSettingsRepository
 import com.zaneschepke.wireguardautotunnel.domain.repository.TunnelRepository
+import com.zaneschepke.wireguardautotunnel.routing.BypassAppsInitializer
 import com.zaneschepke.wireguardautotunnel.service.tile.AutoTunnelTileRefresher
 import com.zaneschepke.wireguardautotunnel.service.tile.TunnelTileRefresher
 import kotlinx.coroutines.async
@@ -30,6 +31,7 @@ class AppBoostrapCoordinator(
     private val tunnelProvider: TunnelProvider,
     private val dnsSettingsCoordinator: DnsSettingsCoordinator,
     private val logReader: LogReader,
+    private val bypassAppsInitializer: BypassAppsInitializer,
 ) {
 
     private val _isReady = MutableStateFlow(false)
@@ -43,6 +45,7 @@ class AppBoostrapCoordinator(
                 async { bootstrapDns() },
                 async { ensureGlobalConfig() },
                 async { restoreBackendConfiguration() },
+                async { bypassAppsInitializer.initializeIfNeeded() },
             )
 
         try {
@@ -93,3 +96,4 @@ class AppBoostrapCoordinator(
         }
     }
 }
+
