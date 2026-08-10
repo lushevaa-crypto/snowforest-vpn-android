@@ -1,6 +1,7 @@
 package com.zaneschepke.wireguardautotunnel.di
 
 import com.zaneschepke.wireguardautotunnel.core.orchestration.AppBoostrapCoordinator
+import com.zaneschepke.wireguardautotunnel.routing.BypassAppsInitializer
 import com.zaneschepke.wireguardautotunnel.core.orchestration.AutoTunnelCoordinator
 import com.zaneschepke.wireguardautotunnel.core.orchestration.DnsSettingsCoordinator
 import com.zaneschepke.wireguardautotunnel.core.orchestration.ShortcutCoordinator
@@ -33,5 +34,13 @@ val coordinatorModule = module {
             get(named(Scope.APPLICATION)),
         )
     }
+    single {
+        BypassAppsInitializer(
+            context = androidContext(),
+            dataStoreManager = get(),
+            tunnelRepository = get(),
+        )
+    }
     singleOf(::AppBoostrapCoordinator)
 }
+
