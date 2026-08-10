@@ -87,7 +87,7 @@ val appModule = module {
     viewModelOf(::ProxySettingsViewModel)
     viewModelOf(::SettingsViewModel)
     viewModelOf(::SharedAppViewModel)
-    viewModel { (id: Int) -> SplitTunnelViewModel(get(), get(), get(), id) }
+    viewModel { (id: Int) -> SplitTunnelViewModel(get(), get(), get(), get(), id) }
     viewModel { SupportViewModel(get(), get(named(Dispatcher.MAIN)), get()) }
     viewModel { (id: Int) -> TunnelViewModel(get(), get(), id) }
 
