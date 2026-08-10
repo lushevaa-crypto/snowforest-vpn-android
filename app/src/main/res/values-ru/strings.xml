@@ -119,7 +119,7 @@
     <string name="vpn_channel_description">Канал уведомлений туннелей VPN</string>
     <string name="auto_tunnel_channel_description">Канал уведомлений о событиях автотуннеля</string>
     <string name="stop">Отключить</string>
-    <string name="splt_tunneling">Раздельное туннелирование</string>
+    <string name="splt_tunneling">Приложения без VPN</string>
     <string name="show_scripts">Показать сценарии</string>
     <string name="pre_up">До подключения</string>
     <string name="post_up">После подключения</string>
@@ -463,3 +463,4 @@
     <string name="seamless_recovery_desc">Обеспечивает защиту при восстановлении после изменений DDNS, сетевых переключений и проблем с NAT</string>
     <string name="now_in_template">Сейчас в %1$s</string>
 </resources>
+
