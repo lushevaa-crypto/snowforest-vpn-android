@@ -32,11 +32,14 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import com.zaneschepke.wireguardautotunnel.data.DataStoreManager
+import com.zaneschepke.wireguardautotunnel.routing.BypassAppsInitializer
 import com.zaneschepke.wireguardautotunnel.routing.SmartRoutingApplicator
 import timber.log.Timber
 
 class TunnelCoordinator(
     private val context: Context,
+    private val dataStoreManager: DataStoreManager,
     private val tunnelProvider: TunnelProvider,
     private val serviceManager: ServiceManager,
     private val bootstrapCoordinator: AppBoostrapCoordinator,
@@ -153,6 +156,21 @@ class TunnelCoordinator(
         // Snow Forest Smart Routing: применяем умную маршрутизацию в runtime
         // Оригинальный конфиг в БД не изменяется
         config = SmartRoutingApplicator.apply(config, context)
+
+        // Snow Forest App Bypass: применяем bypass_packages из DataStore в runtime
+        // Оригинальный конфиг в БД не изменяется
+        val bypassPkgs = dataStoreManager.getFromStore(BypassAppsInitializer.bypassPackages)
+        if (!bypassPkgs.isNullOrEmpty()) {
+            android.util.Log.d("SF_Bypass", "Applying ${bypassPkgs.size} bypass packages")
+            val editableInterface = com.zaneschepke.wireguardautotunnel.ui.state.EditableInterface.from(config.`interface`)
+            val updatedInterface = editableInterface.copy(
+                excludedApplications = bypassPkgs,
+                includedApplications = emptySet(),
+            )
+            config = com.zaneschepke.wireguardautotunnel.ui.state.EditableConfig.from(config)
+                .copy(`interface` = updatedInterface)
+                .buildConfig()
+        }
 
         val policy =
             ConfigReconciler.ConfigReconcilePolicy(
