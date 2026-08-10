@@ -5,7 +5,9 @@ import com.dokar.sonner.ToastType
 import com.zaneschepke.wireguardautotunnel.R
 import com.zaneschepke.wireguardautotunnel.domain.repository.GlobalEffectRepository
 import com.zaneschepke.wireguardautotunnel.domain.repository.InstalledPackageRepository
+import com.zaneschepke.wireguardautotunnel.data.DataStoreManager
 import com.zaneschepke.wireguardautotunnel.domain.repository.TunnelRepository
+import com.zaneschepke.wireguardautotunnel.routing.BypassAppsInitializer
 import com.zaneschepke.wireguardautotunnel.domain.sideeffect.GlobalSideEffect
 import com.zaneschepke.wireguardautotunnel.ui.screens.tunnels.splittunnel.state.SplitOption
 import com.zaneschepke.wireguardautotunnel.ui.state.EditableConfig
@@ -21,6 +23,7 @@ class SplitTunnelViewModel(
     private val tunnelRepository: TunnelRepository,
     private val packageRepository: InstalledPackageRepository,
     private val globalEffectRepository: GlobalEffectRepository,
+    private val dataStoreManager: DataStoreManager,
     val tunnelId: Int,
 ) : OrbitContainerHost<SplitTunnelUiState, SplitTunnelUiState, Nothing>, ViewModel() {
 
@@ -91,6 +94,21 @@ class SplitTunnelViewModel(
         tunnelRepository.save(
             tunnel.copy(quickConfig = updatedConfig.withName(tunnel.name).asQuickString())
         )
+
+        // Синхронизируем bypass_packages в DataStore
+        // DataStore — единственный источник истины для TunnelCoordinator
+        when (state.splitOption) {
+            SplitOption.EXCLUDE -> dataStoreManager.saveToDataStore(
+                BypassAppsInitializer.bypassPackages,
+                state.selectedPackages,
+            )
+            SplitOption.ALL -> dataStoreManager.saveToDataStore(
+                BypassAppsInitializer.bypassPackages,
+                emptySet(),
+            )
+            SplitOption.INCLUDE -> Unit // INCLUDE не используется для bypass
+        }
+
         postSideEffect(
             GlobalSideEffect.Snackbar(
                 StringValue.StringResource(R.string.config_changes_saved),
