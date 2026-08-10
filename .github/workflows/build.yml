@@ -95,7 +95,7 @@ jobs:
           build_type=${{ inputs.build_type }}
           case $build_type in
             "release")
-              ./gradlew :app:assemble${flavor^}Release --info
+              ./gradlew :app:assemble${flavor^}Release --info --stacktrace
               ;;
             "nightly")
               ./gradlew :app:assemble${flavor^}Nightly --info
