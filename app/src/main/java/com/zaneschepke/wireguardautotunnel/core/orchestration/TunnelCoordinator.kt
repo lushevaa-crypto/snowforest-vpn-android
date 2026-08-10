@@ -158,13 +158,18 @@ class TunnelCoordinator(
         config = SmartRoutingApplicator.apply(config, context)
 
         // Snow Forest App Bypass: применяем bypass_packages из DataStore в runtime
+        // Объединяем с пользовательскими исключениями из UI SplitTunnel
         // Оригинальный конфиг в БД не изменяется
         val bypassPkgs = dataStoreManager.getFromStore(BypassAppsInitializer.bypassPackages)
         if (!bypassPkgs.isNullOrEmpty()) {
-            android.util.Log.d("SF_Bypass", "Applying ${bypassPkgs.size} bypass packages")
             val editableInterface = com.zaneschepke.wireguardautotunnel.ui.state.EditableInterface.from(config.`interface`)
+            // Объединяем: системные bypass + пользовательские исключения из UI
+            val existingExcluded = editableInterface.excludedApplications ?: emptySet()
+            val mergedExcluded = existingExcluded + bypassPkgs
+            android.util.Log.d("SF_Bypass", "bypass=${bypassPkgs.size} ui=${existingExcluded.size} merged=${mergedExcluded.size}")
+            android.util.Log.d("SF_Bypass", "packages=$mergedExcluded")
             val updatedInterface = editableInterface.copy(
-                excludedApplications = bypassPkgs,
+                excludedApplications = mergedExcluded,
                 includedApplications = emptySet(),
             )
             config = com.zaneschepke.wireguardautotunnel.ui.state.EditableConfig.from(config)
