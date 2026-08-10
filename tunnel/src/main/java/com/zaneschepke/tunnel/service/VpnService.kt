@@ -226,8 +226,9 @@ class VpnService : android.net.VpnService(), KillSwitch, SocketProtector {
         val intent = backend.applicationProvider.createVpnConfigurePendingIntent(this@VpnService)
         vpnTunFd?.close()
         vpnTunFd = null
+        val tunBuilder = Builder()
         vpnTunFd =
-            Builder()
+            tunBuilder
                 .apply {
                     setSession(tunnel.name)
                     setConfigureIntent(intent)
@@ -275,7 +276,7 @@ class VpnService : android.net.VpnService(), KillSwitch, SocketProtector {
                     // ===== Snow Forest excludeRoute() POC — удалить после тестирования =====
                     if (sawDefaultRoute) {
                         ExcludeRoutePoc.applyExcludeRoutes(
-                            vpnServiceBuilder = this,
+                            vpnServiceBuilder = tunBuilder,
                             sdkInt = android.os.Build.VERSION.SDK_INT,
                         )
                     }
