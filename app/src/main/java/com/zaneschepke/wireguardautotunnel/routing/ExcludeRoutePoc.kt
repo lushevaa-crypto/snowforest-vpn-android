@@ -30,7 +30,6 @@ object ExcludeRoutePoc {
         vpnServiceBuilder: android.net.VpnService.Builder,
         sdkInt: Int,
     ) {
-        // Детальный лог окружения — для сравнения между устройствами
         Log.i(TAG, "=== Snow Forest excludeRoute POC ===")
         Log.i(TAG, "Android SDK = $sdkInt")
         Log.i(TAG, "excludeRoute supported = ${sdkInt >= android.os.Build.VERSION_CODES.TIRAMISU}")
@@ -38,22 +37,28 @@ object ExcludeRoutePoc {
 
         if (sdkInt < android.os.Build.VERSION_CODES.TIRAMISU) {
             Log.w(TAG, "excludeRoute NOT supported on SDK $sdkInt (need 33+)")
-            Log.w(TAG, "establish = skipped (old Android)")
             return
         }
-
         if (ACTIVE_POC == POC_DISABLED) {
             Log.i(TAG, "POC disabled — using full tunnel")
-            Log.i(TAG, "establish = full tunnel mode")
             return
         }
 
         val prefixes = getPrefixes()
         Log.i(TAG, "routes count = ${prefixes.size}")
 
-        val startTime = System.currentTimeMillis()
-        var excludeCount = 0
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            applyExcludeRoutesApi33(vpnServiceBuilder, prefixes)
+        }
+    }
 
+    @androidx.annotation.RequiresApi(android.os.Build.VERSION_CODES.TIRAMISU)
+    private fun applyExcludeRoutesApi33(
+        vpnServiceBuilder: android.net.VpnService.Builder,
+        prefixes: List<String>,
+    ) {
+        var excludeCount = 0
+        val startTime = System.currentTimeMillis()
         try {
             prefixes.forEach { cidr ->
                 val parts = cidr.trim().split("/")
@@ -64,17 +69,14 @@ object ExcludeRoutePoc {
                     excludeCount++
                 }
             }
-
             val elapsed = System.currentTimeMillis() - startTime
             Log.i(TAG, "establish = success")
             Log.i(TAG, "excludeCount = $excludeCount")
             Log.i(TAG, "elapsed = ${elapsed}ms")
             Log.i(TAG, "=== POC PASSED — check 2ip.ru for RU IP ===")
-
         } catch (e: Exception) {
             val elapsed = System.currentTimeMillis() - startTime
-            Log.e(TAG, "establish = FAILED")
-            Log.e(TAG, "failed after $excludeCount calls")
+            Log.e(TAG, "establish = FAILED after $excludeCount calls")
             Log.e(TAG, "exception = ${e::class.simpleName}: ${e.message}")
             Log.e(TAG, "elapsed = ${elapsed}ms")
             Log.e(TAG, "=== POC FAILED ===")
