@@ -1,18 +1,18 @@
 package com.zaneschepke.wireguardautotunnel.routing
 
 import android.content.Context
+import android.content.pm.PackageManager
 import android.util.Log
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.zaneschepke.wireguardautotunnel.data.DataStoreManager
-import com.zaneschepke.wireguardautotunnel.domain.repository.InstalledPackageRepository
 import org.json.JSONArray
 
 /**
  * Snow Forest VPN — инициализация App Bypass
  *
  * Запускается ОДИН РАЗ при первом старте.
- * Читает default_bypass_apps.json → проверяет установленные пакеты
+ * Читает default_bypass_apps.json → проверяет установленные пакеты через PackageManager
  * → сохраняет только существующие в DataStore.
  *
  * Туннели и конфиги НЕ изменяет.
@@ -21,7 +21,6 @@ import org.json.JSONArray
 class BypassAppsInitializer(
     private val context: Context,
     private val dataStoreManager: DataStoreManager,
-    private val packageRepository: InstalledPackageRepository,
 ) {
     companion object {
         val bypassAppsInitialized = booleanPreferencesKey("bypass_apps_initialized")
@@ -44,16 +43,19 @@ class BypassAppsInitializer(
             return
         }
 
-        // Получаем установленные пакеты и фильтруем
-        val installed = packageRepository.getInstalledPackages()
-            .map { it.packageName }
-            .toSet()
+        // Фильтруем через PackageManager — только установленные
+        val pm = context.packageManager
+        val toSave = defaultPackages.filter { pkg ->
+            try {
+                pm.getPackageInfo(pkg, 0)
+                true
+            } catch (e: PackageManager.NameNotFoundException) {
+                false
+            }
+        }.toSet()
 
-        val toSave = defaultPackages.filter { it in installed }.toSet()
-
-        Log.i(TAG, "Default packages: ${defaultPackages.size}, " +
-            "installed: ${installed.size}, saving: ${toSave.size}")
-        Log.d(TAG, "Saving bypass packages: $toSave")
+        Log.i(TAG, "Default: ${defaultPackages.size}, installed: ${toSave.size}")
+        Log.d(TAG, "Saving: $toSave")
 
         dataStoreManager.saveToDataStore(bypassPackages, toSave)
         dataStoreManager.saveToDataStore(bypassAppsInitialized, true)
@@ -61,10 +63,6 @@ class BypassAppsInitializer(
         Log.i(TAG, "Bypass apps initialization complete")
     }
 
-    /**
-     * Загружает все package ID из default_bypass_apps.json.
-     * Формат: [{"name": "Сбербанк", "packages": ["ru.sberbankmobile"]}, ...]
-     */
     private fun loadDefaultPackages(): List<String> {
         return try {
             val json = context.assets.open("default_bypass_apps.json")
