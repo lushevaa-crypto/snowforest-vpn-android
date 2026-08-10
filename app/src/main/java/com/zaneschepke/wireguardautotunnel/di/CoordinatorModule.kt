@@ -39,7 +39,6 @@ val coordinatorModule = module {
         BypassAppsInitializer(
             context = androidContext(),
             dataStoreManager = get(),
-            packageRepository = get(),
         )
     }
     singleOf(::AppBoostrapCoordinator)
