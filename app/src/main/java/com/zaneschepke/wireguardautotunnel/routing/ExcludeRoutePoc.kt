@@ -5,29 +5,83 @@ import android.util.Log
 /**
  * Snow Forest VPN — POC для тестирования excludeRoute() лимитов
  *
- * ТОЛЬКО ДЛЯ ТЕСТИРОВАНИЯ. Удалить после POC.
+ * ТОЛЬКО ДЛЯ ТЕСТИРОВАНИЯ. Удалить после POC одним коммитом.
  *
- * Тесты:
- *   POC_DISABLED = 0  — excludeRoute() выключен (обычный full tunnel)
- *   POC_475       = 1 — 475 вызовов (наш рабочий список)
- *   POC_2000      = 2 — 2000 вызовов
- *   POC_5000      = 3 — 5000 вызовов
- *   POC_FULL      = 4 — 8639 вызовов (полный список)
+ * Как тестировать:
+ *   1. Меняй ACTIVE_POC на нужный режим
+ *   2. Собирай APK
+ *   3. В журнале ищи SF_POC
+ *   4. Проверяй 2ip.ru (должен показать RU IP) и instagram.com (должен работать)
  */
 object ExcludeRoutePoc {
 
-    // ← МЕНЯЙ ЭТУ КОНСТАНТУ для каждого теста
+    // ← МЕНЯЙ ЭТУ СТРОКУ для каждого теста
     const val ACTIVE_POC = POC_475
 
-    const val POC_DISABLED = 0
-    const val POC_475      = 1
-    const val POC_2000     = 2
-    const val POC_5000     = 3
-    const val POC_FULL     = 4
+    const val POC_DISABLED = 0   // excludeRoute выключен — обычный full tunnel
+    const val POC_475      = 1   // 475 реальных RU подсетей
+    const val POC_2000     = 2   // 2000 (дублируем список)
+    const val POC_5000     = 3   // 5000 (дублируем список)
+    const val POC_FULL     = 4   // весь список (475 записей)
 
-    private const val TAG = "SF_excludeRoute_POC"
+    private const val TAG = "SF_POC"
 
-    fun getPrefixes(): List<String> {
+    fun applyExcludeRoutes(
+        builder: android.net.VpnService.Builder,
+        sdkInt: Int,
+    ) {
+        // Детальный лог окружения — для сравнения между устройствами
+        Log.i(TAG, "=== Snow Forest excludeRoute POC ===")
+        Log.i(TAG, "Android SDK = $sdkInt")
+        Log.i(TAG, "excludeRoute supported = ${sdkInt >= android.os.Build.VERSION_CODES.TIRAMISU}")
+        Log.i(TAG, "ACTIVE_POC = $ACTIVE_POC")
+
+        if (sdkInt < android.os.Build.VERSION_CODES.TIRAMISU) {
+            Log.w(TAG, "excludeRoute NOT supported on SDK $sdkInt (need 33+)")
+            Log.w(TAG, "establish = skipped (old Android)")
+            return
+        }
+
+        if (ACTIVE_POC == POC_DISABLED) {
+            Log.i(TAG, "POC disabled — using full tunnel")
+            Log.i(TAG, "establish = full tunnel mode")
+            return
+        }
+
+        val prefixes = getPrefixes()
+        Log.i(TAG, "routes count = ${prefixes.size}")
+
+        val startTime = System.currentTimeMillis()
+        var excludeCount = 0
+
+        try {
+            prefixes.forEach { cidr ->
+                val parts = cidr.trim().split("/")
+                if (parts.size == 2) {
+                    val addr = java.net.InetAddress.getByName(parts[0])
+                    val prefix = parts[1].toInt()
+                    builder.excludeRoute(android.net.IpPrefix(addr, prefix))
+                    excludeCount++
+                }
+            }
+
+            val elapsed = System.currentTimeMillis() - startTime
+            Log.i(TAG, "establish = success")
+            Log.i(TAG, "excludeCount = $excludeCount")
+            Log.i(TAG, "elapsed = ${elapsed}ms")
+            Log.i(TAG, "=== POC PASSED — check 2ip.ru for RU IP ===")
+
+        } catch (e: Exception) {
+            val elapsed = System.currentTimeMillis() - startTime
+            Log.e(TAG, "establish = FAILED")
+            Log.e(TAG, "failed after $excludeCount calls")
+            Log.e(TAG, "exception = ${e::class.simpleName}: ${e.message}")
+            Log.e(TAG, "elapsed = ${elapsed}ms")
+            Log.e(TAG, "=== POC FAILED ===")
+        }
+    }
+
+    private fun getPrefixes(): List<String> {
         val count = when (ACTIVE_POC) {
             POC_DISABLED -> return emptyList()
             POC_475      -> 475
@@ -36,12 +90,11 @@ object ExcludeRoutePoc {
             POC_FULL     -> ALL_RU_PREFIXES.size
             else         -> return emptyList()
         }
-        Log.i(TAG, "POC mode=$ACTIVE_POC count=$count")
+
         return if (count <= ALL_RU_PREFIXES.size) {
             ALL_RU_PREFIXES.take(count)
         } else {
-            // Для тестов > 475: повторяем список чтобы набрать нужное количество
-            // Это тест Binder лимита, а не корректности маршрутов
+            // Для тестов > реального списка: повторяем для нагрузки на Binder
             val result = mutableListOf<String>()
             while (result.size < count) result.addAll(ALL_RU_PREFIXES)
             result.take(count)
