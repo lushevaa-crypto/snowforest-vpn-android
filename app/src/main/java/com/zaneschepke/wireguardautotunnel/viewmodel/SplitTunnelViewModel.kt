@@ -52,7 +52,11 @@ class SplitTunnelViewModel(
                             config?.`interface`?.allIncludedApps?.isNotEmpty() == true ->
                                 SplitOption.INCLUDE to config.`interface`.allIncludedApps.toSet()
 
-                            else -> SplitOption.ALL to emptySet()
+                            else -> {
+                                // Snow Forest: по умолчанию EXCLUDE с пакетами из DataStore
+                                // Скрыли переключатель ALL/INCLUDE от пользователя
+                                SplitOption.EXCLUDE to emptySet()
+                            }
                         }
 
                     val isInitialized = currentState.tunnel != null
