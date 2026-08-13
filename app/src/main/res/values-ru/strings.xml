@@ -462,5 +462,9 @@
     <string name="seamless_recovery">Восстанавливать туннель</string>
     <string name="seamless_recovery_desc">Обеспечивает защиту при восстановлении после изменений DDNS, сетевых переключений и проблем с NAT</string>
     <string name="now_in_template">Сейчас в %1$s</string>
+    <!-- Snow Forest App Bypass -->
+    <string name="bypass_apps_title">Без VPN</string>
+    <string name="bypass_apps_section">Приложения</string>
+    <string name="bypass_sites_section">Сайты</string>
 </resources>
 
