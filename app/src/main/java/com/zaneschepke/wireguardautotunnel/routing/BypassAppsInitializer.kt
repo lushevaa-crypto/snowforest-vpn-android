@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.util.Log
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.zaneschepke.wireguardautotunnel.data.DataStoreManager
 import org.json.JSONArray
@@ -24,15 +25,22 @@ class BypassAppsInitializer(
 ) {
     companion object {
         val bypassAppsInitialized = booleanPreferencesKey("bypass_apps_initialized")
+        val bypassAppsVersion = intPreferencesKey("bypass_apps_version")
         val bypassPackages = stringSetPreferencesKey("bypass_packages")
         private const val TAG = "SF_BypassApps"
+        // Увеличь эту версию чтобы переприменить дефолтный список
+        private const val CURRENT_VERSION = 2
     }
 
     suspend fun initializeIfNeeded() {
         val alreadyInitialized = dataStoreManager.getFromStore(bypassAppsInitialized) == true
-        if (alreadyInitialized) {
-            Log.d(TAG, "Already initialized, skipping")
+        val currentVersion = dataStoreManager.getFromStore(bypassAppsVersion) ?: 0
+        if (alreadyInitialized && currentVersion >= CURRENT_VERSION) {
+            Log.d(TAG, "Already initialized v$currentVersion, skipping")
             return
+        }
+        if (alreadyInitialized) {
+            Log.i(TAG, "Upgrading bypass apps list from v$currentVersion to v$CURRENT_VERSION")
         }
 
         Log.i(TAG, "First launch — initializing bypass apps")
@@ -59,6 +67,7 @@ class BypassAppsInitializer(
 
         dataStoreManager.saveToDataStore(bypassPackages, toSave)
         dataStoreManager.saveToDataStore(bypassAppsInitialized, true)
+        dataStoreManager.saveToDataStore(bypassAppsVersion, CURRENT_VERSION)
 
         Log.i(TAG, "Bypass apps initialization complete")
     }
