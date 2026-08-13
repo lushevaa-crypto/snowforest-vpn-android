@@ -36,6 +36,12 @@ import com.zaneschepke.wireguardautotunnel.ui.navigation.Route
 import com.zaneschepke.wireguardautotunnel.ui.state.DisplayTunnelState
 import com.zaneschepke.wireguardautotunnel.ui.state.TunnelsUiState
 import com.zaneschepke.wireguardautotunnel.ui.sideeffect.LocalSideEffect
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Text
+import androidx.compose.ui.unit.dp
 import com.zaneschepke.wireguardautotunnel.util.extensions.openWebUrl
 import com.zaneschepke.wireguardautotunnel.viewmodel.SharedAppViewModel
 
@@ -133,7 +139,28 @@ fun TunnelList(
                 selected = selected,
                 expandedContent =
                     if (isRunning) {
-                        { TunnelStatisticsRow(activeTunnel) }
+                        {
+                            TunnelStatisticsRow(activeTunnel)
+                            // Snow Forest: кнопка быстрого доступа к Приложения без VPN
+                            Row(
+                                modifier = androidx.compose.ui.Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp),
+                                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Start,
+                            ) {
+                                TextButton(
+                                    onClick = {
+                                        navController.push(Route.SplitTunnel(id = tunnel.id))
+                                    }
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.bypass_apps_title),
+                                        style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                                        color = androidx.compose.material3.MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                            }
+                        }
                     } else {
                         null
                     },
