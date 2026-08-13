@@ -140,14 +140,11 @@ fun TunnelList(
                 expandedContent =
                     if (isRunning) {
                         {
-                            TunnelStatisticsRow(activeTunnel)
-                            // Snow Forest: кнопка быстрого доступа к Приложения без VPN
-                            Row(
-                                modifier = androidx.compose.ui.Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 4.dp),
-                                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Start,
+                            androidx.compose.foundation.layout.Column(
+                                modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
                             ) {
+                                TunnelStatisticsRow(activeTunnel)
+                                // Snow Forest: кнопка быстрого доступа к Приложения без VPN
                                 TextButton(
                                     onClick = {
                                         navController.push(Route.SplitTunnel(id = tunnel.id))
