@@ -155,7 +155,9 @@ class TunnelCoordinator(
 
         // Snow Forest Smart Routing: применяем умную маршрутизацию в runtime
         // Оригинальный конфиг в БД не изменяется
-        config = SmartRoutingApplicator.apply(config, context)
+        // Snow Forest: SmartRouting отключён — использует ненадёжный /20 фильтр и обрезку до 5000 маршрутов
+        // Оставлен в коде для возможного возврата. App bypass через addDisallowedApplication() — основной механизм.
+        // config = SmartRoutingApplicator.apply(config, context)
 
         // Snow Forest App Bypass: применяем bypass_packages из DataStore в runtime
         // DataStore — единственный источник истины.
