@@ -1,5 +1,6 @@
 package com.zaneschepke.wireguardautotunnel.viewmodel
 
+import androidx.lifecycle.viewModelScope
 import com.zaneschepke.wireguardautotunnel.domain.repository.TunnelRepository
 import com.zaneschepke.wireguardautotunnel.routing.BypassAppsInitializer
 import com.zaneschepke.wireguardautotunnel.data.DataStoreManager
