@@ -53,9 +53,12 @@ class SplitTunnelViewModel(
                                 SplitOption.INCLUDE to config.`interface`.allIncludedApps.toSet()
 
                             else -> {
-                                // Snow Forest: по умолчанию EXCLUDE с пакетами из DataStore
+                                // SF: читаем из DataStore — единственный источник истины
                                 // Скрыли переключатель ALL/INCLUDE от пользователя
-                                SplitOption.EXCLUDE to emptySet()
+                                val dsPkgs = dataStoreManager.getFromStore(
+                                    BypassAppsInitializer.bypassPackages
+                                )
+                                SplitOption.EXCLUDE to (dsPkgs ?: emptySet())
                             }
                         }
 
