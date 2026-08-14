@@ -466,5 +466,12 @@
     <string name="bypass_apps_title">Без VPN</string>
     <string name="bypass_apps_section">Приложения</string>
     <string name="bypass_sites_section">Сайты</string>
+    <!-- Snow Forest: Без VPN раздел -->
+    <string name="no_vpn_tab">Без VPN</string>
+    <string name="no_vpn_description">Выберите приложения и сайты, которые будут работать напрямую без VPN.</string>
+    <string name="no_vpn_apps_title">Приложения без VPN</string>
+    <string name="no_vpn_apps_description">Сбербанк, Лемана ПРО и другие приложения работают напрямую.</string>
+    <string name="no_vpn_sites_title">Сайты без VPN</string>
+    <string name="no_vpn_sites_coming_soon">Скоро: выберите сайты для прямого подключения.</string>
 </resources>
 
