@@ -48,7 +48,7 @@ fun BottomNavbar(isAutoTunnelActive: Boolean, currentTab: Tab, onTabSelected: (T
                 Tab.entries.forEach { tab ->
                     val interactionSource = remember { MutableInteractionSource() }
                     val isSelected = currentTab == tab
-                    val hasBadge = tab == Tab.AUTOTUNNEL && isAutoTunnelActive
+                    val hasBadge = false // SF: AUTOTUNNEL tab removed
                     val color = if (isSelected) MaterialTheme.colorScheme.primary
                                 else MaterialTheme.colorScheme.onSurfaceVariant
 
