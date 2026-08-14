@@ -140,23 +140,7 @@ fun TunnelList(
                 expandedContent =
                     if (isRunning) {
                         {
-                            androidx.compose.foundation.layout.Column(
-                                modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
-                            ) {
-                                TunnelStatisticsRow(activeTunnel)
-                                // Snow Forest: кнопка быстрого доступа к Приложения без VPN
-                                TextButton(
-                                    onClick = {
-                                        navController.push(Route.SplitTunnel(id = tunnel.id))
-                                    }
-                                ) {
-                                    Text(
-                                        text = stringResource(R.string.bypass_apps_title),
-                                        style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
-                                        color = androidx.compose.material3.MaterialTheme.colorScheme.primary,
-                                    )
-                                }
-                            }
+                            TunnelStatisticsRow(activeTunnel)
                         }
                     } else {
                         null
