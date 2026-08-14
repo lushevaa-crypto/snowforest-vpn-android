@@ -88,6 +88,8 @@ sealed class Route : NavKey {
             get() = true
     }
 
+    @Keep @Serializable data object NoVpn : Route()
+
     @Keep @Serializable data object Sort : Route()
 
     @Keep @Serializable data object Settings : Route()
@@ -171,7 +173,7 @@ enum class Tab(
     val index: Int,
 ) {
     TUNNELS(Route.Tunnels, R.string.tunnels, Icons.Outlined.Home, Icons.Filled.Home, 0),
-    AUTOTUNNEL(Route.AutoTunnel, R.string.auto_tunnel, Icons.Outlined.Bolt, Icons.Filled.Bolt, 1),
+    NOVPN(Route.NoVpn, R.string.no_vpn_tab, Icons.Outlined.Bolt, Icons.Filled.Bolt, 1),
     SETTINGS(Route.Settings, R.string.settings, Icons.Outlined.Settings, Icons.Filled.Settings, 2),
     SUPPORT(
         Route.Support,
@@ -196,7 +198,8 @@ enum class Tab(
                 Route.WifiDetectionMethod,
                 Route.WifiPreferences,
                 is Route.PreferredTunnel,
-                Route.LocationDisclosure -> AUTOTUNNEL
+                Route.LocationDisclosure -> SETTINGS
+                Route.NoVpn -> NOVPN
                 is Route.Settings,
                 Route.AndroidIntegrations,
                 Route.Dns,
