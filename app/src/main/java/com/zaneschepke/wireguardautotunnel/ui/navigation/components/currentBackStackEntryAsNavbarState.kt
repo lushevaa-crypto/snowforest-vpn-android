@@ -580,6 +580,12 @@ fun currentRouteAsNavbarState(
                         showBottomItems = true,
                     )
                 }
+                is Route.NoVpn -> {
+                    NavbarState(
+                        topTitle = context.getString(R.string.no_vpn_tab),
+                        showBottomItems = true,
+                    )
+                }
                 null -> {
                     NavbarState()
                 }
