@@ -42,8 +42,6 @@ fun PeerStatisticsSection(peer: ActivePeer) {
             style = style,
             color = color,
         )
-        peer.endpoint?.let {
-            StatText(stringResource(R.string.endpoint_template, it), style = style, color = color)
-        }
+        // SF: IP:порт скрыт — не показываем пользователю адрес сервера
     }
 }
