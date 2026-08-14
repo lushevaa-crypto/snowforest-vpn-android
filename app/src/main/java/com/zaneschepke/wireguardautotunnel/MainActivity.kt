@@ -576,10 +576,12 @@ class MainActivity : AppCompatActivity() {
                                                 }
                                                 entry<Route.AutoTunnel> { AutoTunnelScreen() }
                                                 entry<Route.NoVpn> {
+                                                    val firstTunnelId = uiState.tunnels.firstOrNull()?.id
                                                     NoVpnScreen(
                                                         onNavigateToApps = {
-                                                            // Открываем SplitTunnel для первого туннеля
-                                                            // TODO: передавать ID активного туннеля
+                                                            firstTunnelId?.let {
+                                                                navController.push(Route.SplitTunnel(id = it))
+                                                            }
                                                         },
                                                         onNavigateToSites = {},
                                                     )
