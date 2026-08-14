@@ -9,25 +9,32 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
-import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.zaneschepke.wireguardautotunnel.R
+import com.zaneschepke.wireguardautotunnel.viewmodel.NoVpnViewModel
+import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun NoVpnScreen(
-    onNavigateToApps: () -> Unit,
-    onNavigateToSites: () -> Unit,
+    onNavigateToApps: (tunnelId: Int) -> Unit,
 ) {
+    val viewModel: NoVpnViewModel = koinViewModel()
+    val firstTunnelId by viewModel.firstTunnelId.collectAsState()
+    val bypassCount by viewModel.bypassCount.collectAsState()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -42,15 +49,16 @@ fun NoVpnScreen(
             modifier = Modifier.padding(bottom = 8.dp),
         )
 
-        // Карточка: Приложения без VPN
+        // Приложения без VPN
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { onNavigateToApps() },
+                .clickable {
+                    firstTunnelId?.let { onNavigateToApps(it) }
+                },
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant,
             ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         ) {
             Row(
                 modifier = Modifier
@@ -74,7 +82,10 @@ fun NoVpnScreen(
                             style = MaterialTheme.typography.titleSmall,
                         )
                         Text(
-                            text = stringResource(R.string.no_vpn_apps_description),
+                            text = if (bypassCount > 0)
+                                stringResource(R.string.no_vpn_apps_count, bypassCount)
+                            else
+                                stringResource(R.string.no_vpn_apps_description),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -83,48 +94,41 @@ fun NoVpnScreen(
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
                     contentDescription = null,
-                    modifier = Modifier.padding(start = 8.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
 
-        // Карточка: Сайты без VPN (заглушка)
+        // Сайты без VPN — заглушка
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
             ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Language,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                Icon(
+                    imageVector = Icons.Filled.Language,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = stringResource(R.string.no_vpn_sites_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            text = stringResource(R.string.no_vpn_sites_title),
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            text = stringResource(R.string.no_vpn_sites_coming_soon),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                    Text(
+                        text = stringResource(R.string.no_vpn_sites_coming_soon),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }
