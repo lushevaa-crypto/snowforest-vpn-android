@@ -100,6 +100,7 @@ import com.zaneschepke.wireguardautotunnel.ui.navigation.components.DynamicTopAp
 import com.zaneschepke.wireguardautotunnel.ui.navigation.components.currentRouteAsNavbarState
 import com.zaneschepke.wireguardautotunnel.ui.navigation.functions.rememberNavController
 import com.zaneschepke.wireguardautotunnel.ui.screens.autotunnel.AutoTunnelScreen
+import com.zaneschepke.wireguardautotunnel.ui.screens.novpn.NoVpnScreen
 import com.zaneschepke.wireguardautotunnel.ui.screens.autotunnel.detection.WifiDetectionMethodScreen
 import com.zaneschepke.wireguardautotunnel.ui.screens.autotunnel.disclosure.LocationDisclosureScreen
 import com.zaneschepke.wireguardautotunnel.ui.screens.autotunnel.preferred.PreferredTunnelScreen
@@ -574,6 +575,15 @@ class MainActivity : AppCompatActivity() {
                                                     LocationDisclosureScreen()
                                                 }
                                                 entry<Route.AutoTunnel> { AutoTunnelScreen() }
+                                                entry<Route.NoVpn> {
+                                                    NoVpnScreen(
+                                                        onNavigateToApps = {
+                                                            // Открываем SplitTunnel для первого туннеля
+                                                            // TODO: передавать ID активного туннеля
+                                                        },
+                                                        onNavigateToSites = {},
+                                                    )
+                                                }
                                                 entry<Route.WifiPreferences> {
                                                     WifiSettingsScreen()
                                                 }
