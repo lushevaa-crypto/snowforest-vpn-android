@@ -576,14 +576,10 @@ class MainActivity : AppCompatActivity() {
                                                 }
                                                 entry<Route.AutoTunnel> { AutoTunnelScreen() }
                                                 entry<Route.NoVpn> {
-                                                    val firstTunnelId = uiState.tunnels.firstOrNull()?.id
                                                     NoVpnScreen(
-                                                        onNavigateToApps = {
-                                                            firstTunnelId?.let {
-                                                                navController.push(Route.SplitTunnel(id = it))
-                                                            }
+                                                        onNavigateToApps = { tunnelId ->
+                                                            navController.push(Route.SplitTunnel(id = tunnelId))
                                                         },
-                                                        onNavigateToSites = {},
                                                     )
                                                 }
                                                 entry<Route.WifiPreferences> {
