@@ -238,8 +238,13 @@ class FileUtils(private val context: Context, private val ioDispatcher: Coroutin
     }
 
     private fun getFileNameByCursor(uri: Uri): String? {
-        return context.contentResolver.query(uri, null, null, null, null)?.use {
-            getDisplayNameByCursor(it)
+        // Явно запрашиваем DISPLAY_NAME — как в AmneziaWG TunnelImporter
+        val columns = arrayOf(android.provider.OpenableColumns.DISPLAY_NAME)
+        return context.contentResolver.query(uri, columns, null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (idx >= 0) cursor.getString(idx) else null
+            } else null
         }
     }
 
