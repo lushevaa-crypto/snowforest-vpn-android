@@ -122,6 +122,13 @@ class SplitTunnelViewModel(
                 ToastType.Success,
             )
         )
+        // SF: уведомляем о необходимости перезапустить VPN
+        postSideEffect(
+            GlobalSideEffect.Snackbar(
+                StringValue.StringResource(R.string.restart_vpn_for_changes),
+                ToastType.Info,
+            )
+        )
         postSideEffect(GlobalSideEffect.PopBackStack)
     }
 
