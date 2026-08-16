@@ -198,14 +198,14 @@ class FileUtils(private val context: Context, private val ioDispatcher: Coroutin
         val lastSegment = uri.lastPathSegment ?: "null"
         val decoded = Uri.decode(lastSegment)
 
-        android.util.Log.d("SF_FileUtils", "URI scheme=$scheme authority=$authority")
-        android.util.Log.d("SF_FileUtils", "URI path=$path")
-        android.util.Log.d("SF_FileUtils", "URI lastPathSegment=$lastSegment")
-        android.util.Log.d("SF_FileUtils", "URI decoded=$decoded")
+        android.util.Log.e("SF_FileUtils", "URI scheme=$scheme authority=$authority")
+        android.util.Log.e("SF_FileUtils", "URI path=$path")
+        android.util.Log.e("SF_FileUtils", "URI lastPathSegment=$lastSegment")
+        android.util.Log.e("SF_FileUtils", "URI decoded=$decoded")
 
         // 1. Пробуем ContentResolver — работает для Files, Downloads
         val fromCursor = getFileNameByCursor(uri)
-        android.util.Log.d("SF_FileUtils", "ContentResolver DISPLAY_NAME=$fromCursor")
+        android.util.Log.e("SF_FileUtils", "ContentResolver DISPLAY_NAME=$fromCursor")
 
         var name = fromCursor ?: ""
 
@@ -220,7 +220,7 @@ class FileUtils(private val context: Context, private val ioDispatcher: Coroutin
             name = name.substring(idx + 1)
         }
 
-        android.util.Log.d("SF_FileUtils", "Final filename=$name")
+        android.util.Log.e("SF_FileUtils", "Final filename=$name")
         return if (name.isNotEmpty()) name else NumberUtils.generateRandomTunnelName()
     }
 
@@ -238,14 +238,15 @@ class FileUtils(private val context: Context, private val ioDispatcher: Coroutin
     }
 
     private fun getFileNameByCursor(uri: Uri): String? {
-        // Явно запрашиваем DISPLAY_NAME — как в AmneziaWG TunnelImporter
         val columns = arrayOf(android.provider.OpenableColumns.DISPLAY_NAME)
-        return context.contentResolver.query(uri, columns, null, null, null)?.use { cursor ->
+        val result = context.contentResolver.query(uri, columns, null, null, null)?.use { cursor ->
             if (cursor.moveToFirst()) {
                 val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
                 if (idx >= 0) cursor.getString(idx) else null
             } else null
         }
+        android.util.Log.e("SF_FileUtils", "DISPLAY_NAME result=$result uri=$uri")
+        return result
     }
 
     /**
